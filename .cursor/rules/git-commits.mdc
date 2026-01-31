@@ -1,0 +1,96 @@
+---
+description: Git commit conventions - semantic commit messages and no Co-authored-by trailers
+alwaysApply: true
+---
+
+# Git Commit Conventions
+
+## Semantic Commit Messages (Conventional Commits)
+
+Use semantic commit message format for all commits:
+
+### Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+### Types
+
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, semicolons, etc.)
+- `refactor`: Code refactoring (no feature change or bug fix)
+- `perf`: Performance improvements
+- `test`: Adding or updating tests
+- `build`: Build system or dependency changes
+- `ci`: CI/CD changes
+- `chore`: Other changes (maintenance, tooling, etc.)
+
+### Examples
+
+**Good:**
+```bash
+git commit -m "feat: add dark mode toggle"
+git commit -m "fix: resolve weight input validation issue"
+git commit -m "refactor: improve IndexedDB error handling"
+git commit -m "docs: update README with deployment instructions"
+git commit -m "style: format code with prettier"
+git commit -m "build: configure GitHub Pages deployment"
+```
+
+**Bad:**
+```bash
+git commit -m "Fixed bug"
+git commit -m "Update stuff"
+git commit -m "Changes"
+```
+
+### Scope (Optional)
+
+Scope indicates what part of the codebase is affected:
+
+```bash
+git commit -m "feat(ui): add theme toggle button"
+git commit -m "fix(db): handle IndexedDB connection errors"
+git commit -m "refactor(components): extract ExerciseCard logic"
+```
+
+### Body and Footer (Optional)
+
+For complex changes, add a body:
+
+```bash
+git commit -m "feat: add session completion tracking
+
+- Store session entries in component state
+- Save all entries on Complete Session click
+- Add error handling for failed saves"
+```
+
+## Do NOT Include Co-authored-by Trailers
+
+Never add `Co-authored-by` trailers to commit messages, especially from AI agents or automated tools.
+
+**Bad:**
+```bash
+git commit -m "fix: resolve bug" --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>"
+```
+
+**Good:**
+```bash
+git commit -m "fix: resolve bug"
+```
+
+### When Running Git Commands
+
+When executing git commit commands:
+- Use semantic commit message format
+- Do not add `--trailer` flags
+- Do not include `Co-authored-by` lines
+- Keep commits clean and professional
