@@ -72,12 +72,14 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="light" storageKey="gym-workout-theme">
-      <div className="App">
-        {currentView === 'list' ? (
-          <SessionList onSelectSession={handleSelectSession} />
-        ) : selectedSessionId ? (
-          <SessionView sessionId={selectedSessionId} onBack={handleBack} />
-        ) : null}
+      <div className="App min-h-screen flex flex-col">
+        <div className="flex-1">
+          {currentView === 'list' ? (
+            <SessionList onSelectSession={handleSelectSession} />
+          ) : selectedSessionId ? (
+            <SessionView sessionId={selectedSessionId} onBack={handleBack} />
+          ) : null}
+        </div>
         <VersionDisplay />
       </div>
     </ThemeProvider>

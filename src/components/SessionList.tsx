@@ -26,7 +26,7 @@ export function SessionList({ onSelectSession }: SessionListProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="min-h-screen bg-background p-4 pb-20">
       <div className="max-w-md mx-auto">
         <div className="flex justify-end mt-4 mb-4">
           <ThemeToggle />

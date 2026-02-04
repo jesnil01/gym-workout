@@ -14,7 +14,7 @@ interface SessionViewProps {
 
 interface SessionEntry {
   exerciseId: string;
-  weight: number | null;
+  value: number | null;
   completed: boolean;
   sessionId: string;
 }
@@ -34,12 +34,12 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
     setSaveError(null);
   }, [sessionId]);
 
-  const handleExerciseUpdate = (exerciseId: string, weight: number | null, completed: boolean) => {
+  const handleExerciseUpdate = (exerciseId: string, value: number | null, completed: boolean) => {
     setSessionEntries(prev => ({
       ...prev,
       [exerciseId]: {
         exerciseId,
-        weight,
+        value,
         completed,
         sessionId
       }
@@ -47,9 +47,9 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
   };
 
   const handleCompleteSession = async () => {
-    // Filter out entries without valid weight
+    // Filter out entries without valid value
     const validEntries = Object.values(sessionEntries).filter(
-      entry => entry.weight !== null && !isNaN(entry.weight) && entry.weight > 0
+      entry => entry.value !== null && !isNaN(entry.value) && entry.value > 0
     );
 
     if (validEntries.length === 0) {
@@ -65,7 +65,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
       for (const entry of validEntries) {
         await saveLog({
           exerciseId: entry.exerciseId,
-          weight: entry.weight!,
+          value: entry.value!,
           completed: entry.completed,
           sessionId: entry.sessionId
         });
@@ -94,7 +94,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-background pb-32 mb-12">
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-background shadow-md border-b">
         <div className="px-4 py-4">
