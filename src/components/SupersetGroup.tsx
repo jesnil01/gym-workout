@@ -5,7 +5,7 @@ import type { Superset } from '../config/sessions';
 interface SupersetGroupProps {
   superset: Superset;
   sessionId: string;
-  onExerciseUpdate: (exerciseId: string, weight: number | null, completed: boolean) => void;
+  onExerciseUpdate: (exerciseId: string, value: number | null, completed: boolean) => void;
   sectionNumber: number;
 }
 

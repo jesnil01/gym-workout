@@ -3,6 +3,7 @@ export interface Exercise {
   name: string;
   sets: number;
   reps: number | string;
+  metricType: "weight" | "time";
 }
 
 export interface Superset {
@@ -24,22 +25,22 @@ export const sessions: Session[] = [
       {
         rest: 90,
         exercises: [
-          { id: "bench", name: "Bench Press", sets: 5, reps: 5 },
-          { id: "barbell_row", name: "Barbell Row", sets: 5, reps: 8 }
+          { id: "bench", name: "Bench Press", sets: 5, reps: 5, metricType: "weight" },
+          { id: "barbell_row", name: "Barbell Row", sets: 5, reps: 8, metricType: "weight" }
         ]
       },
       {
         rest: 60,
         exercises: [
-          { id: "incline_db_press", name: "Incline Dumbbell Press", sets: 3, reps: 10 },
-          { id: "lat_pulldown", name: "Lat Pulldown", sets: 3, reps: 10 }
+          { id: "incline_db_press", name: "Incline Dumbbell Press", sets: 3, reps: 10, metricType: "weight" },
+          { id: "lat_pulldown", name: "Lat Pulldown", sets: 3, reps: 10, metricType: "weight" }
         ]
       },
       {
         rest: 45,
         exercises: [
-          { id: "lateral_raise", name: "Dumbbell Lateral Raises", sets: 3, reps: 15 },
-          { id: "face_pull", name: "Face Pulls", sets: 3, reps: 15 }
+          { id: "lateral_raise", name: "Dumbbell Lateral Raises", sets: 3, reps: 15, metricType: "weight" },
+          { id: "face_pull", name: "Face Pulls", sets: 3, reps: 15, metricType: "weight" }
         ]
       },
       {
@@ -58,29 +59,29 @@ export const sessions: Session[] = [
       {
         rest: 120,
         exercises: [
-          { id: "squat", name: "Back Squat", sets: 5, reps: 5 },
-          { id: "lat_pulldown_neutral", name: "Lat Pulldown (Neutral Grip)", sets: 5, reps: 8 }
+          { id: "squat", name: "Back Squat", sets: 5, reps: 5, metricType: "weight" },
+          { id: "lat_pulldown_neutral", name: "Lat Pulldown (Neutral Grip)", sets: 5, reps: 8, metricType: "weight" }
         ]
       },
       {
         rest: 75,
         exercises: [
-          { id: "rdl", name: "Romanian Deadlift", sets: 3, reps: 8 },
-          { id: "seated_row", name: "Seated Cable Row", sets: 3, reps: 10 }
+          { id: "rdl", name: "Romanian Deadlift", sets: 3, reps: 8, metricType: "weight" },
+          { id: "seated_row", name: "Seated Cable Row", sets: 3, reps: 10, metricType: "weight" }
         ]
       },
       {
         rest: 60,
         exercises: [
-          { id: "reverse_lunge", name: "Reverse Dumbbell Lunges", sets: 3, reps: 10 },
-          { id: "plank", name: "Plank", sets: 3, reps: "45s" }
+          { id: "reverse_lunge", name: "Reverse Dumbbell Lunges", sets: 3, reps: 10, metricType: "weight" },
+          { id: "plank", name: "Plank", sets: 3, reps: "45s", metricType: "time" }
         ]
       },
       {
         rest: 45,
         exercises: [
-          { id: "alt_db_curl", name: "Alternating Dumbbell Curl", sets: 2, reps: 12 },
-          { id: "overhead_triceps", name: "Overhead Triceps Extension", sets: 2, reps: 12 }
+          { id: "alt_db_curl", name: "Alternating Dumbbell Curl", sets: 2, reps: 12, metricType: "weight" },
+          { id: "overhead_triceps", name: "Overhead Triceps Extension", sets: 2, reps: 12, metricType: "weight" }
         ]
       }
     ]
@@ -106,8 +107,8 @@ export const sessions: Session[] = [
       {
         rest: 45,
         exercises: [
-          { id: "barbell_curl", name: "Barbell Curl", sets: 3, reps: 10 },
-          { id: "triceps_pushdown", name: "Triceps Pushdown", sets: 3, reps: 12 }
+          { id: "barbell_curl", name: "Barbell Curl", sets: 3, reps: 10, metricType: "weight" },
+          { id: "triceps_pushdown", name: "Triceps Pushdown", sets: 3, reps: 12, metricType: "weight" }
         ]
       }
     ]

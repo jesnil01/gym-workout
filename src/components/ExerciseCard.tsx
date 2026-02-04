@@ -9,59 +9,66 @@ import type { Exercise } from '../config/sessions';
 interface ExerciseCardProps {
   exercise: Exercise;
   sessionId: string;
-  onExerciseUpdate: (exerciseId: string, weight: number | null, completed: boolean) => void;
+  onExerciseUpdate: (exerciseId: string, value: number | null, completed: boolean) => void;
 }
 
 export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: ExerciseCardProps) {
-  const { getLastEntry } = useIndexedDB();
-  const [weight, setWeight] = useState('');
+  const { getLastEntry, getLastNEntries } = useIndexedDB();
+  const isTimeBased = exercise.metricType === 'time';
+  const [value, setValue] = useState('');
   const [completed, setCompleted] = useState(false);
-  const [lastWeight, setLastWeight] = useState<number | null>(null);
-  const [lastCompleted, setLastCompleted] = useState<boolean | null>(null);
+  const [lastEntries, setLastEntries] = useState<Array<{ value: number; completed: boolean; timestamp: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load last entry for this exercise
-    const loadLastEntry = async () => {
+    // Load last 3 entries for this exercise
+    const loadLastEntries = async () => {
       try {
-        const lastEntry = await getLastEntry(exercise.id);
-        if (lastEntry) {
-          setLastWeight(lastEntry.weight);
-          setLastCompleted(lastEntry.completed);
-          // Pre-fill weight with last used value
-          setWeight(lastEntry.weight.toString());
+        const entries = await getLastNEntries(exercise.id, 3);
+        if (entries.length > 0) {
+          setLastEntries(entries.map(e => ({
+            value: e.value,
+            completed: e.completed,
+            timestamp: e.timestamp
+          })));
+          // Pre-fill value with last used value
+          setValue(entries[0].value.toString());
         }
       } catch (err) {
-        console.error(`Failed to load last entry for ${exercise.id}:`, err);
+        console.error(`Failed to load last entries for ${exercise.id}:`, err);
       } finally {
         setLoading(false);
       }
     };
 
-    loadLastEntry();
-  }, [exercise.id, getLastEntry]);
+    loadLastEntries();
+  }, [exercise.id, getLastNEntries]);
 
-  const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newWeight = e.target.value;
-    setWeight(newWeight);
+  const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setValue(newValue);
 
     // Update parent state (not DB)
-    onExerciseUpdate(
-      exercise.id,
-      newWeight && !isNaN(newWeight) && parseFloat(newWeight) > 0 ? parseFloat(newWeight) : null,
-      completed
-    );
+    const parsedValue = isTimeBased
+      ? (newValue && !isNaN(parseInt(newValue)) && parseInt(newValue) > 0 ? parseInt(newValue) : null)
+      : (newValue && !isNaN(parseFloat(newValue)) && parseFloat(newValue) > 0 ? parseFloat(newValue) : null);
+
+    onExerciseUpdate(exercise.id, parsedValue, completed);
   };
 
   const handleCompletedChange = (checked: boolean) => {
     setCompleted(checked);
 
     // Update parent state (not DB)
-    onExerciseUpdate(
-      exercise.id,
-      weight && !isNaN(weight) && parseFloat(weight) > 0 ? parseFloat(weight) : null,
-      checked
-    );
+    const parsedValue = isTimeBased
+      ? (value && !isNaN(parseInt(value)) && parseInt(value) > 0 ? parseInt(value) : null)
+      : (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0 ? parseFloat(value) : null);
+
+    onExerciseUpdate(exercise.id, parsedValue, checked);
+  };
+
+  const formatValue = (val: number): string => {
+    return isTimeBased ? `${val}s` : `${val}kg`;
   };
 
   if (loading) {
@@ -80,25 +87,35 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
       <CardHeader>
         <CardTitle className="text-lg">{exercise.name}</CardTitle>
         <CardDescription>
-          {exercise.sets} × {exercise.reps}
+          {isTimeBased ? `${exercise.sets} sets` : `${exercise.sets} × ${exercise.reps}`}
         </CardDescription>
-        {lastWeight !== null && (
-          <CardDescription className="text-xs mt-1">
-            Last: {lastWeight}kg {lastCompleted !== null && (lastCompleted ? '✓' : '✗')}
+        {lastEntries.length > 0 && (
+          <CardDescription className="text-xs mt-1 space-y-1">
+            {lastEntries.map((entry, index) => (
+              <div key={index} className="flex items-center gap-1.5">
+                <span>{entry.completed ? '✅' : '❌'}</span>
+                <span>{formatValue(entry.value)}</span>
+                <span className="text-muted-foreground">
+                  {new Date(entry.timestamp).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
           </CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-2">
-          <Label htmlFor={`weight-${exercise.id}`}>Weight (kg)</Label>
+          <Label htmlFor={`value-${exercise.id}`}>
+            {isTimeBased ? 'Time (seconds)' : 'Weight (kg)'}
+          </Label>
           <Input
-            id={`weight-${exercise.id}`}
+            id={`value-${exercise.id}`}
             type="number"
-            inputMode="decimal"
-            step="0.5"
+            inputMode={isTimeBased ? "numeric" : "decimal"}
+            step={isTimeBased ? "1" : "0.5"}
             min="0"
-            value={weight}
-            onChange={handleWeightChange}
+            value={value}
+            onChange={handleValueChange}
             className="text-lg h-12"
             placeholder="0"
           />
