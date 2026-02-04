@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "VITE_APP_VERSION=$npm_package_version vite",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
-    "build": "vite build",
+    "build": "VITE_APP_VERSION=$npm_package_version vite build",
     "preview": "vite preview"
   },
   "dependencies": {

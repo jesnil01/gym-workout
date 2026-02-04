@@ -33,6 +33,8 @@ jobs:
         run: npm ci
 
       - name: Build
+        env:
+          VITE_COMMIT_HASH: ${{ github.sha }}
         run: npm run build
 
       - name: Setup Pages

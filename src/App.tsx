@@ -4,6 +4,7 @@ import { SessionView } from './components/SessionView';
 import { useIndexedDB } from './hooks/useIndexedDB';
 import { sessions } from './config/sessions';
 import { ThemeProvider } from './components/theme-provider';
+import { VersionDisplay } from './components/VersionDisplay';
 
 function App() {
   const [currentView, setCurrentView] = useState<'list' | 'session'>('list');
@@ -77,6 +78,7 @@ function App() {
         ) : selectedSessionId ? (
           <SessionView sessionId={selectedSessionId} onBack={handleBack} />
         ) : null}
+        <VersionDisplay />
       </div>
     </ThemeProvider>
   );
