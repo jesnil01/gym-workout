@@ -1,5 +1,5 @@
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
@@ -14,7 +14,7 @@ export interface Exercise {
 export interface WorkoutLogEntry {
   id?: number;
   exerciseId: string;
-  weight: number;
+  value: number;
   completed: boolean;
   timestamp: number;
   sessionId: string;
@@ -44,6 +44,7 @@ export function initDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const oldVersion = event.oldVersion;
 
       // Create exercises object store
       if (!db.objectStoreNames.contains(EXERCISES_STORE)) {
@@ -62,6 +63,30 @@ export function initDB(): Promise<IDBDatabase> {
         logStore.createIndex('exerciseId', 'exerciseId', { unique: false });
         logStore.createIndex('sessionId', 'sessionId', { unique: false });
         logStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Migration from version 1 to 2: rename weight to value
+      if (oldVersion < 2 && db.objectStoreNames.contains(WORKOUT_LOGS_STORE)) {
+        const transaction = (event.target as IDBOpenDBRequest).transaction!;
+        const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+        const request = store.openCursor();
+
+        request.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+          if (cursor) {
+            const entry = cursor.value;
+            // Migrate weight to value
+            if ('weight' in entry && !('value' in entry)) {
+              const updatedEntry = {
+                ...entry,
+                value: entry.weight
+              };
+              delete updatedEntry.weight;
+              cursor.update(updatedEntry);
+            }
+            cursor.continue();
+          }
+        };
       }
     };
   });
@@ -88,7 +113,7 @@ export async function saveExercise(exercise: Exercise): Promise<void> {
  * Save a workout log entry
  * @param {Object} entry - Workout log entry
  * @param {string} entry.exerciseId - Exercise ID
- * @param {number} entry.weight - Weight used
+ * @param {number} entry.value - Value (weight in kg or time in seconds)
  * @param {boolean} entry.completed - Whether exercise was completed successfully
  * @param {string} entry.sessionId - Session ID
  * @returns {Promise<number>} - Returns the auto-generated ID
@@ -141,6 +166,36 @@ export async function getLastExerciseEntry(exerciseId: string): Promise<WorkoutL
 }
 
 /**
+ * Get the last N workout log entries for an exercise
+ * @param {string} exerciseId - Exercise ID
+ * @param {number} limit - Maximum number of entries to return
+ * @returns {Promise<Array>} - Array of workout log entries (most recent first)
+ */
+export async function getLastNExerciseEntries(exerciseId: string, limit: number): Promise<WorkoutLogEntry[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readonly');
+    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+    const index = store.index('exerciseId');
+    const request = index.openCursor(IDBKeyRange.only(exerciseId), 'prev');
+
+    const entries: WorkoutLogEntry[] = [];
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+      if (cursor && entries.length < limit) {
+        entries.push(cursor.value as WorkoutLogEntry);
+        cursor.continue();
+      } else {
+        resolve(entries);
+      }
+    };
+
+    request.onerror = () => reject(new Error('Failed to get last N exercise entries'));
+  });
+}
+
+/**
  * Get all workout logs for a specific session
  * @param {string} sessionId - Session ID
  * @returns {Promise<Array>} - Array of workout log entries
@@ -160,5 +215,49 @@ export async function getSessionHistory(sessionId: string): Promise<WorkoutLogEn
     };
 
     request.onerror = () => reject(new Error('Failed to get session history'));
+  });
+}
+
+/**
+ * Get all workout logs within a date range
+ * @param {number} startDate - Start timestamp (inclusive)
+ * @param {number} endDate - End timestamp (inclusive)
+ * @returns {Promise<Array>} - Array of workout log entries
+ */
+export async function getWorkoutsInDateRange(startDate: number, endDate: number): Promise<WorkoutLogEntry[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readonly');
+    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+    const index = store.index('timestamp');
+    const range = IDBKeyRange.bound(startDate, endDate);
+    const request = index.getAll(range);
+
+    request.onsuccess = () => {
+      const logs = (request.result as WorkoutLogEntry[]).sort((a, b) => b.timestamp - a.timestamp);
+      resolve(logs);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get workouts in date range'));
+  });
+}
+
+/**
+ * Get all workout log entries
+ * @returns {Promise<Array>} - Array of all workout log entries
+ */
+export async function getAllWorkoutLogs(): Promise<WorkoutLogEntry[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readonly');
+    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const logs = (request.result as WorkoutLogEntry[]).sort((a, b) => b.timestamp - a.timestamp);
+      resolve(logs);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get all workout logs'));
   });
 }

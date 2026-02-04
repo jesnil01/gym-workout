@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getSessionHistory, saveExercise, type Exercise, type WorkoutLogEntry } from '../db/indexedDB';
+import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, type Exercise, type WorkoutLogEntry } from '../db/indexedDB';
 
 export function useIndexedDB() {
   const [dbReady, setDbReady] = useState(false);
@@ -36,6 +36,15 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const getLastNEntries = useCallback(async (exerciseId: string, limit: number): Promise<WorkoutLogEntry[]> => {
+    try {
+      return await getLastNExerciseEntries(exerciseId, limit);
+    } catch (err) {
+      console.error('Failed to get last N exercise entries:', err);
+      return [];
+    }
+  }, []);
+
   const getHistory = useCallback(async (sessionId: string): Promise<WorkoutLogEntry[]> => {
     try {
       return await getSessionHistory(sessionId);
@@ -54,12 +63,33 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const getWorkoutsInRange = useCallback(async (startDate: number, endDate: number): Promise<WorkoutLogEntry[]> => {
+    try {
+      return await getWorkoutsInDateRange(startDate, endDate);
+    } catch (err) {
+      console.error('Failed to get workouts in range:', err);
+      return [];
+    }
+  }, []);
+
+  const getAllLogs = useCallback(async (): Promise<WorkoutLogEntry[]> => {
+    try {
+      return await getAllWorkoutLogs();
+    } catch (err) {
+      console.error('Failed to get all logs:', err);
+      return [];
+    }
+  }, []);
+
   return {
     dbReady,
     error,
     saveLog,
     getLastEntry,
+    getLastNEntries,
     getHistory,
-    saveExerciseData
+    saveExerciseData,
+    getWorkoutsInRange,
+    getAllLogs
   };
 }
