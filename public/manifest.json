@@ -21,5 +21,9 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "serviceworker": {
+    "src": "/gym-workout/sw.js",
+    "scope": "/gym-workout/"
+  }
 }
