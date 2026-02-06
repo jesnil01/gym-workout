@@ -84,3 +84,47 @@ export function generateBackupFilename(): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `gym-workout-backup-${year}-${month}-${day}.json`;
 }
+
+/**
+ * Read and parse a JSON backup file
+ * @param {File} file - File object from file input
+ * @returns {Promise<BackupData>} - Parsed backup data
+ */
+export async function readJSONFile(file: File): Promise<BackupData> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) {
+          reject(new Error('File is empty'));
+          return;
+        }
+        
+        const data = JSON.parse(text);
+        
+        // Validate backup structure
+        if (!data.exercises || !Array.isArray(data.exercises)) {
+          reject(new Error('Invalid backup file: missing or invalid exercises array'));
+          return;
+        }
+        
+        if (!data.workoutLogs || !Array.isArray(data.workoutLogs)) {
+          reject(new Error('Invalid backup file: missing or invalid workoutLogs array'));
+          return;
+        }
+        
+        resolve(data as BackupData);
+      } catch (err) {
+        reject(new Error(`Failed to parse JSON: ${err instanceof Error ? err.message : 'Unknown error'}`));
+      }
+    };
+    
+    reader.onerror = () => {
+      reject(new Error('Failed to read file'));
+    };
+    
+    reader.readAsText(file);
+  });
+}

@@ -306,3 +306,76 @@ export async function exportBackup(): Promise<BackupData> {
     workoutLogs
   };
 }
+
+export interface ImportResult {
+  success: boolean;
+  exercisesImported: number;
+  workoutLogsImported: number;
+  error?: string;
+}
+
+/**
+ * Import backup data into the database
+ * @param {BackupData} backupData - Backup data to import
+ * @returns {Promise<ImportResult>} - Import result with counts
+ */
+export async function importBackup(backupData: BackupData): Promise<ImportResult> {
+  try {
+    // Validate backup data structure
+    if (!backupData.exercises || !backupData.workoutLogs) {
+      throw new Error('Invalid backup file format');
+    }
+
+    let exercisesImported = 0;
+    let workoutLogsImported = 0;
+
+    // Import exercises
+    for (const exercise of backupData.exercises) {
+      try {
+        await saveExercise(exercise);
+        exercisesImported++;
+      } catch (err) {
+        console.error(`Failed to import exercise ${exercise.id}:`, err);
+        // Continue with other exercises
+      }
+    }
+
+    // Import workout logs with preserved timestamps
+    const db = await initDB();
+    for (const log of backupData.workoutLogs) {
+      try {
+        // Preserve original timestamp from backup
+        await new Promise<void>((resolve, reject) => {
+          const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readwrite');
+          const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+          
+          const logEntry = {
+            ...log,
+            timestamp: log.timestamp || Date.now() // Use original timestamp or current time if missing
+          };
+
+          const request = store.add(logEntry);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(new Error('Failed to import workout log'));
+        });
+        workoutLogsImported++;
+      } catch (err) {
+        console.error(`Failed to import workout log:`, err);
+        // Continue with other logs
+      }
+    }
+
+    return {
+      success: true,
+      exercisesImported,
+      workoutLogsImported
+    };
+  } catch (err) {
+    return {
+      success: false,
+      exercisesImported: 0,
+      workoutLogsImported: 0,
+      error: err instanceof Error ? err.message : 'Failed to import backup'
+    };
+  }
+}
