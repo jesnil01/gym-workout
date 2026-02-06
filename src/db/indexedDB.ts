@@ -261,3 +261,48 @@ export async function getAllWorkoutLogs(): Promise<WorkoutLogEntry[]> {
     request.onerror = () => reject(new Error('Failed to get all workout logs'));
   });
 }
+
+/**
+ * Get all exercises from the database
+ * @returns {Promise<Array>} - Array of all exercises
+ */
+export async function getAllExercises(): Promise<Exercise[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([EXERCISES_STORE], 'readonly');
+    const store = transaction.objectStore(EXERCISES_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const exercises = request.result as Exercise[];
+      resolve(exercises);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get all exercises'));
+  });
+}
+
+export interface BackupData {
+  version: string;
+  exportDate: number;
+  exercises: Exercise[];
+  workoutLogs: WorkoutLogEntry[];
+}
+
+/**
+ * Export all database data as a backup object
+ * @returns {Promise<BackupData>} - Backup data object with all exercises and workout logs
+ */
+export async function exportBackup(): Promise<BackupData> {
+  const [exercises, workoutLogs] = await Promise.all([
+    getAllExercises(),
+    getAllWorkoutLogs()
+  ]);
+
+  return {
+    version: '1.0.0',
+    exportDate: Date.now(),
+    exercises,
+    workoutLogs
+  };
+}

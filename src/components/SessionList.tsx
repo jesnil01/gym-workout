@@ -5,6 +5,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { ThemeToggle } from './theme-toggle';
 import { Dashboard } from './Dashboard';
 import { AnimatedTitle } from './AnimatedTitle';
+import { BackupNotification } from './BackupNotification';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,9 @@ export function SessionList({ onSelectSession }: SessionListProps) {
         
         {/* Animated Title */}
         <AnimatedTitle fontFamily="'Poppins', sans-serif" color="white" />
+        
+        {/* Backup Notification */}
+        <BackupNotification />
         
         {/* Dashboard */}
         <Dashboard />

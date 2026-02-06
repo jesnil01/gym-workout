@@ -3,6 +3,7 @@
   "short_name": "Workout",
   "description": "Mobile-first workout tracking app for the gym",
   "start_url": "/gym-workout/",
+  "scope": "/gym-workout/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",

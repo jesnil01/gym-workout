@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, type Exercise, type WorkoutLogEntry } from '../db/indexedDB';
+import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, type Exercise, type WorkoutLogEntry, type BackupData } from '../db/indexedDB';
 
 export function useIndexedDB() {
   const [dbReady, setDbReady] = useState(false);
@@ -81,6 +81,24 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const getAllExercisesData = useCallback(async (): Promise<Exercise[]> => {
+    try {
+      return await getAllExercises();
+    } catch (err) {
+      console.error('Failed to get all exercises:', err);
+      return [];
+    }
+  }, []);
+
+  const exportBackupData = useCallback(async (): Promise<BackupData> => {
+    try {
+      return await exportBackup();
+    } catch (err) {
+      console.error('Failed to export backup:', err);
+      throw err;
+    }
+  }, []);
+
   return {
     dbReady,
     error,
@@ -90,6 +108,8 @@ export function useIndexedDB() {
     getHistory,
     saveExerciseData,
     getWorkoutsInRange,
-    getAllLogs
+    getAllLogs,
+    getAllExercises: getAllExercisesData,
+    exportBackup: exportBackupData
   };
 }
