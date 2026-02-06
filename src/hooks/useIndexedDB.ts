@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult } from '../db/indexedDB';
+import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry } from '../db/indexedDB';
 
 export function useIndexedDB() {
   const [dbReady, setDbReady] = useState(false);
@@ -108,6 +108,24 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const saveBodyWeightData = useCallback(async (weight: number): Promise<number> => {
+    try {
+      return await saveBodyWeight(weight);
+    } catch (err) {
+      console.error('Failed to save body weight:', err);
+      throw err;
+    }
+  }, []);
+
+  const getAllBodyWeightsData = useCallback(async (): Promise<BodyWeightEntry[]> => {
+    try {
+      return await getAllBodyWeights();
+    } catch (err) {
+      console.error('Failed to get body weights:', err);
+      return [];
+    }
+  }, []);
+
   return {
     dbReady,
     error,
@@ -120,6 +138,8 @@ export function useIndexedDB() {
     getAllLogs,
     getAllExercises: getAllExercisesData,
     exportBackup: exportBackupData,
-    importBackup: importBackupData
+    importBackup: importBackupData,
+    saveBodyWeight: saveBodyWeightData,
+    getAllBodyWeights: getAllBodyWeightsData
   };
 }

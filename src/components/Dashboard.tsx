@@ -2,19 +2,21 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { getWorkoutCountInDays, formatWeightProgression, getCompletedSessions, type CompletedSession } from '../lib/workoutStats';
-import { getMockWorkoutLogs, getMockWorkoutCount, getMockWeightProgressions, getMockCompletedSessions } from '../lib/mockData';
+import { getMockWorkoutLogs, getMockWorkoutCount, getMockWeightProgressions, getMockCompletedSessions, getMockBodyWeights } from '../lib/mockData';
 import { sessions } from '../config/sessions';
-import { ArrowUp, ArrowDown, Minus, Sparkles } from 'lucide-react';
+import { ArrowUp, ArrowDown, Minus, Sparkles, Scale } from 'lucide-react';
+import type { BodyWeightEntry } from '../db/indexedDB';
 
 interface DashboardProps {
   onSelectSession?: (sessionId: string) => void;
 }
 
 export function Dashboard({ onSelectSession }: DashboardProps) {
-  const { dbReady, getAllLogs } = useIndexedDB();
+  const { dbReady, getAllLogs, getAllBodyWeights } = useIndexedDB();
   const [workoutCount, setWorkoutCount] = useState<number | null>(null);
   const [progressions, setProgressions] = useState<Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>>(new Map());
   const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
+  const [bodyWeightEntries, setBodyWeightEntries] = useState<BodyWeightEntry[]>([]);
   const [loading, setLoading] = useState(true);
   
   const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
@@ -32,9 +34,11 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
         const mockCount = getMockWorkoutCount();
         const mockProgressions = getMockWeightProgressions();
         const mockSessions = getMockCompletedSessions();
+        const mockBodyWeights = getMockBodyWeights();
         setWorkoutCount(mockCount);
         setProgressions(mockProgressions);
         setCompletedSessions(mockSessions);
+        setBodyWeightEntries(mockBodyWeights);
         setLoading(false);
       } else {
         // Use real data
@@ -46,6 +50,10 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
           // Get completed sessions
           const completedSessionsList = getCompletedSessions(allLogs);
           setCompletedSessions(completedSessionsList);
+          
+          // Get body weight entries
+          const bodyWeights = await getAllBodyWeights();
+          setBodyWeightEntries(bodyWeights);
           
           // Calculate weight progressions
           const progressionMap = new Map<string, {current: number; previous: number | null; exerciseName: string}>();
@@ -94,7 +102,7 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
     };
 
     loadData();
-  }, [dbReady, getAllLogs, useMockData]);
+  }, [dbReady, getAllLogs, getAllBodyWeights, useMockData]);
 
   if (loading) {
     return (
@@ -216,6 +224,34 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Body Weight Log */}
+      {bodyWeightEntries.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Scale className="h-5 w-5" />
+              Weight Logged
+            </CardTitle>
+            <CardDescription>Recent weight entries</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {bodyWeightEntries.slice(0, 10).map((entry) => (
+                <div 
+                  key={entry.id}
+                  className="flex items-center justify-between py-2.5 px-3 rounded-md border-r border-t border-b border-l-4 border-l-orange-400 bg-orange-50/50 dark:bg-orange-950/30"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Weight logged</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{formatSessionDate(entry.timestamp)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Weight Progressions */}
       {progressionArray.length > 0 ? (

@@ -1,8 +1,9 @@
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
+const BODY_WEIGHT_STORE = 'bodyWeight';
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -18,6 +19,12 @@ export interface WorkoutLogEntry {
   completed: boolean;
   timestamp: number;
   sessionId: string;
+}
+
+export interface BodyWeightEntry {
+  id?: number;
+  weight: number; // Weight in kg with one decimal precision
+  timestamp: number;
 }
 
 /**
@@ -63,6 +70,15 @@ export function initDB(): Promise<IDBDatabase> {
         logStore.createIndex('exerciseId', 'exerciseId', { unique: false });
         logStore.createIndex('sessionId', 'sessionId', { unique: false });
         logStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Create bodyWeight object store
+      if (!db.objectStoreNames.contains(BODY_WEIGHT_STORE)) {
+        const bodyWeightStore = db.createObjectStore(BODY_WEIGHT_STORE, {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        bodyWeightStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
 
       // Migration from version 1 to 2: rename weight to value
@@ -378,4 +394,61 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
       error: err instanceof Error ? err.message : 'Failed to import backup'
     };
   }
+}
+
+/**
+ * Save body weight entry to the database
+ * @param {number} weight - Weight in kg (must have max one decimal place)
+ * @returns {Promise<number>} - Returns the auto-generated ID
+ */
+export async function saveBodyWeight(weight: number): Promise<number> {
+  // Validate weight is positive
+  if (weight <= 0) {
+    throw new Error('Weight must be greater than 0');
+  }
+
+  // Validate weight has maximum one decimal place
+  // Check if (weight * 10) is an integer
+  if ((weight * 10) % 1 !== 0) {
+    throw new Error('Weight must have maximum one decimal place (e.g., 75.5)');
+  }
+
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([BODY_WEIGHT_STORE], 'readwrite');
+    const store = transaction.objectStore(BODY_WEIGHT_STORE);
+    
+    const entry: BodyWeightEntry = {
+      weight,
+      timestamp: Date.now()
+    };
+
+    const request = store.add(entry);
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(new Error('Failed to save body weight'));
+  });
+}
+
+/**
+ * Get all body weight entries sorted by timestamp (descending)
+ * @returns {Promise<BodyWeightEntry[]>} - Array of body weight entries
+ */
+export async function getAllBodyWeights(): Promise<BodyWeightEntry[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([BODY_WEIGHT_STORE], 'readonly');
+    const store = transaction.objectStore(BODY_WEIGHT_STORE);
+    const index = store.index('timestamp');
+    const request = index.getAll();
+
+    request.onsuccess = () => {
+      const entries = request.result as BodyWeightEntry[];
+      // Sort by timestamp descending (most recent first)
+      entries.sort((a, b) => b.timestamp - a.timestamp);
+      resolve(entries);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get body weights'));
+  });
 }

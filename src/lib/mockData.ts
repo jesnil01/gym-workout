@@ -1,4 +1,4 @@
-import type { WorkoutLogEntry } from '../db/indexedDB';
+import type { WorkoutLogEntry, BodyWeightEntry } from '../db/indexedDB';
 import type { CompletedSession } from './workoutStats';
 import { sessions } from '../config/sessions';
 
@@ -224,4 +224,41 @@ export function getMockCompletedSessions(): CompletedSession[] {
   
   // Sort by most recent first
   return mockSessions.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/**
+ * Get mock body weight entries
+ * Returns body weight entries spread across the last 7 days
+ */
+export function getMockBodyWeights(): BodyWeightEntry[] {
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+  
+  // Create mock body weight entries on different days
+  // Realistic weight progression: slight variations around 75kg
+  const mockWeights: BodyWeightEntry[] = [
+    {
+      id: 1,
+      weight: 75.2,
+      timestamp: now - (0 * oneDay) // Today
+    },
+    {
+      id: 2,
+      weight: 75.0,
+      timestamp: now - (2 * oneDay) // 2 days ago
+    },
+    {
+      id: 3,
+      weight: 74.8,
+      timestamp: now - (4 * oneDay) // 4 days ago
+    },
+    {
+      id: 4,
+      weight: 75.1,
+      timestamp: now - (6 * oneDay) // 6 days ago
+    }
+  ];
+  
+  // Sort by most recent first
+  return mockWeights.sort((a, b) => b.timestamp - a.timestamp);
 }
