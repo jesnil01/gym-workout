@@ -1,4 +1,6 @@
 import type { WorkoutLogEntry } from '../db/indexedDB';
+import type { CompletedSession } from './workoutStats';
+import { sessions } from '../config/sessions';
 
 /**
  * Generate mock workout logs for the last 7 days
@@ -170,4 +172,56 @@ export function getMockWeightProgressions(): Map<string, {current: number; previ
   // because they don't show an increase or have no previous value
   
   return progressions;
+}
+
+/**
+ * Get mock completed sessions
+ * Returns sessions from days 0, 1, 2, 3, 4, 6 (matching existing mock data)
+ */
+export function getMockCompletedSessions(): CompletedSession[] {
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+  
+  // Create a map of sessionId to sessionName
+  const sessionNameMap = new Map<string, string>();
+  sessions.forEach(session => {
+    sessionNameMap.set(session.id, session.name);
+  });
+  
+  // Sessions from mock data: Day 0 (A), Day 1 (B), Day 2 (S), Day 3 (A), Day 4 (B), Day 6 (S)
+  const mockSessions: CompletedSession[] = [
+    {
+      sessionId: 'A',
+      sessionName: sessionNameMap.get('A') || 'Session A',
+      timestamp: now - (0 * oneDay) // Day 0 (today)
+    },
+    {
+      sessionId: 'B',
+      sessionName: sessionNameMap.get('B') || 'Session B',
+      timestamp: now - (1 * oneDay) // Day 1 (yesterday)
+    },
+    {
+      sessionId: 'S',
+      sessionName: sessionNameMap.get('S') || 'Session S',
+      timestamp: now - (2 * oneDay) // Day 2
+    },
+    {
+      sessionId: 'A',
+      sessionName: sessionNameMap.get('A') || 'Session A',
+      timestamp: now - (3 * oneDay) // Day 3
+    },
+    {
+      sessionId: 'B',
+      sessionName: sessionNameMap.get('B') || 'Session B',
+      timestamp: now - (4 * oneDay) // Day 4
+    },
+    {
+      sessionId: 'S',
+      sessionName: sessionNameMap.get('S') || 'Session S',
+      timestamp: now - (6 * oneDay) // Day 6
+    }
+  ];
+  
+  // Sort by most recent first
+  return mockSessions.sort((a, b) => b.timestamp - a.timestamp);
 }

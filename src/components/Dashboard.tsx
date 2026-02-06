@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { useIndexedDB } from '../hooks/useIndexedDB';
-import { getWorkoutCountInDays, formatWeightProgression } from '../lib/workoutStats';
-import { getMockWorkoutLogs, getMockWorkoutCount, getMockWeightProgressions } from '../lib/mockData';
+import { getWorkoutCountInDays, formatWeightProgression, getCompletedSessions, type CompletedSession } from '../lib/workoutStats';
+import { getMockWorkoutLogs, getMockWorkoutCount, getMockWeightProgressions, getMockCompletedSessions } from '../lib/mockData';
 import { sessions } from '../config/sessions';
 import { ArrowUp, ArrowDown, Minus, Sparkles } from 'lucide-react';
 
@@ -14,6 +14,7 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
   const { dbReady, getAllLogs } = useIndexedDB();
   const [workoutCount, setWorkoutCount] = useState<number | null>(null);
   const [progressions, setProgressions] = useState<Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>>(new Map());
+  const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
   const [loading, setLoading] = useState(true);
   
   const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
@@ -30,8 +31,10 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
         // Use mock data
         const mockCount = getMockWorkoutCount();
         const mockProgressions = getMockWeightProgressions();
+        const mockSessions = getMockCompletedSessions();
         setWorkoutCount(mockCount);
         setProgressions(mockProgressions);
+        setCompletedSessions(mockSessions);
         setLoading(false);
       } else {
         // Use real data
@@ -39,6 +42,10 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
           const allLogs = await getAllLogs();
           const count = getWorkoutCountInDays(allLogs, 7);
           setWorkoutCount(count);
+          
+          // Get completed sessions
+          const completedSessionsList = getCompletedSessions(allLogs);
+          setCompletedSessions(completedSessionsList);
           
           // Calculate weight progressions
           const progressionMap = new Map<string, {current: number; previous: number | null; exerciseName: string}>();
@@ -115,6 +122,43 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
     })
     .slice(0, 5); // Limit to latest 5 progressions
 
+  // Helper function to get color classes for session
+  const getSessionColor = (sessionId: string): { border: string; bg: string } => {
+    switch (sessionId) {
+      case 'A':
+        return { border: 'border-l-4 border-l-blue-400', bg: 'bg-blue-50/50 dark:bg-blue-950/30' };
+      case 'B':
+        return { border: 'border-l-4 border-l-green-400', bg: 'bg-green-50/50 dark:bg-green-950/30' };
+      case 'S':
+        return { border: 'border-l-4 border-l-purple-400', bg: 'bg-purple-50/50 dark:bg-purple-950/30' };
+      default:
+        return { border: 'border-l-4 border-l-gray-400', bg: 'bg-gray-50/50 dark:bg-gray-950/30' };
+    }
+  };
+
+  // Helper function to format session date
+  const formatSessionDate = (timestamp: number): string => {
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const date = new Date(timestamp);
+    const today = new Date(now);
+    const yesterday = new Date(now - oneDay);
+    
+    // Reset time to compare dates only
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const yesterdayOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+    
+    if (dateOnly.getTime() === todayOnly.getTime()) {
+      return 'Today';
+    } else if (dateOnly.getTime() === yesterdayOnly.getTime()) {
+      return 'Yesterday';
+    } else {
+      // Format as "Feb 3" or similar
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  };
+
   return (
     <div className="space-y-4 mb-6">
       {/* Workouts Last 7 Days Stat */}
@@ -133,6 +177,45 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
           </CardDescription>
         </CardContent>
       </Card>
+
+      {/* Session Log */}
+      {completedSessions.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Session Log</CardTitle>
+            <CardDescription>Recent completed workouts</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {completedSessions.slice(0, 10).map((session) => {
+                const colors = getSessionColor(session.sessionId);
+                return (
+                <div 
+                  key={`${session.sessionId}-${session.timestamp}`}
+                  className={`flex items-center justify-between py-2.5 px-3 rounded-md border-r border-t border-b ${colors.border} ${colors.bg}`}
+                >
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{session.sessionName}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{formatSessionDate(session.timestamp)}</div>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Session Log</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription>
+              Complete workouts to see your session history here
+            </CardDescription>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Weight Progressions */}
       {progressionArray.length > 0 ? (
