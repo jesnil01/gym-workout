@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { ThemeToggle } from './theme-toggle';
 import { Dashboard } from './Dashboard';
+import { AnimatedTitle } from './AnimatedTitle';
 import {
   Dialog,
   DialogContent,
@@ -26,11 +27,14 @@ export function SessionList({ onSelectSession }: SessionListProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 pb-20">
+    <div className="min-h-screen p-4 pb-20 relative">
       <div className="max-w-md mx-auto">
         <div className="flex justify-end mt-4 mb-4">
           <ThemeToggle />
         </div>
+        
+        {/* Animated Title */}
+        <AnimatedTitle fontFamily="'Poppins', sans-serif" color="white" />
         
         {/* Dashboard */}
         <Dashboard />

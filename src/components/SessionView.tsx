@@ -94,7 +94,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-32 mb-12">
+    <div className="min-h-screen pb-32 mb-12">
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-background shadow-md border-b">
         <div className="px-4 py-4">

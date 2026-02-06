@@ -5,6 +5,7 @@ import { useIndexedDB } from './hooks/useIndexedDB';
 import { sessions } from './config/sessions';
 import { ThemeProvider } from './components/theme-provider';
 import { VersionDisplay } from './components/VersionDisplay';
+import { AnimatedBackground } from './components/AnimatedBackground';
 
 function App() {
   const [currentView, setCurrentView] = useState<'list' | 'session'>('list');
@@ -72,15 +73,18 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="light" storageKey="gym-workout-theme">
-      <div className="App min-h-screen flex flex-col">
-        <div className="flex-1">
-          {currentView === 'list' ? (
-            <SessionList onSelectSession={handleSelectSession} />
-          ) : selectedSessionId ? (
-            <SessionView sessionId={selectedSessionId} onBack={handleBack} />
-          ) : null}
+      <div className="relative min-h-screen">
+        <AnimatedBackground />
+        <div className="App min-h-screen flex flex-col relative z-10">
+          <div className="flex-1">
+            {currentView === 'list' ? (
+              <SessionList onSelectSession={handleSelectSession} />
+            ) : selectedSessionId ? (
+              <SessionView sessionId={selectedSessionId} onBack={handleBack} />
+            ) : null}
+          </div>
+          <VersionDisplay />
         </div>
-        <VersionDisplay />
       </div>
     </ThemeProvider>
   );
