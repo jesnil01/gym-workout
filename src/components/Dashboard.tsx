@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { useIndexedDB } from '../hooks/useIndexedDB';
-import { getWorkoutCountInDays, formatWeightProgression, getCompletedSessions, type CompletedSession } from '../lib/workoutStats';
-import { getMockWorkoutLogs, getMockWorkoutCount, getMockWeightProgressions, getMockCompletedSessions, getMockBodyWeights } from '../lib/mockData';
+import { formatWeightProgression, getCompletedSessions, type CompletedSession } from '../lib/workoutStats';
+import { getMockWeightProgressions, getMockCompletedSessions, getMockBodyWeights } from '../lib/mockData';
 import { sessions } from '../config/sessions';
 import { ArrowUp, ArrowDown, Minus, Sparkles, Scale } from 'lucide-react';
 import type { BodyWeightEntry } from '../db/indexedDB';
@@ -13,7 +13,6 @@ interface DashboardProps {
 
 export function Dashboard({ onSelectSession }: DashboardProps) {
   const { dbReady, getAllLogs, getAllBodyWeights } = useIndexedDB();
-  const [workoutCount, setWorkoutCount] = useState<number | null>(null);
   const [progressions, setProgressions] = useState<Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>>(new Map());
   const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
   const [bodyWeightEntries, setBodyWeightEntries] = useState<BodyWeightEntry[]>([]);
@@ -31,11 +30,9 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
       
       if (useMockData) {
         // Use mock data
-        const mockCount = getMockWorkoutCount();
         const mockProgressions = getMockWeightProgressions();
         const mockSessions = getMockCompletedSessions();
         const mockBodyWeights = getMockBodyWeights();
-        setWorkoutCount(mockCount);
         setProgressions(mockProgressions);
         setCompletedSessions(mockSessions);
         setBodyWeightEntries(mockBodyWeights);
@@ -44,8 +41,6 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
         // Use real data
         try {
           const allLogs = await getAllLogs();
-          const count = getWorkoutCountInDays(allLogs, 7);
-          setWorkoutCount(count);
           
           // Get completed sessions
           const completedSessionsList = getCompletedSessions(allLogs);
@@ -169,22 +164,6 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
 
   return (
     <div className="space-y-4 mb-6">
-      {/* Workouts Last 7 Days Stat */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Workouts Last 7 Days</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-3xl font-bold">{workoutCount ?? 0}</div>
-          <CardDescription className="mt-1">
-            {workoutCount === 0 
-              ? 'Start logging workouts to see your progress'
-              : workoutCount === 1 
-              ? 'Great start! Keep it up!'
-              : 'Keep up the momentum!'}
-          </CardDescription>
-        </CardContent>
-      </Card>
 
       {/* Session Log */}
       {completedSessions.length > 0 ? (

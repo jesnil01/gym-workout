@@ -4,7 +4,9 @@ import { Button } from './ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { ThemeToggle } from './theme-toggle';
 import { Dashboard } from './Dashboard';
-import { AnimatedTitle } from './AnimatedTitle';
+import { Logo } from './Logo';
+import { WorkoutSubtitle } from './WorkoutSubtitle';
+import { WorkoutCountText } from './WorkoutCountText';
 import { BackupNotification } from './BackupNotification';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -73,12 +75,17 @@ export function SessionList({ onSelectSession }: SessionListProps) {
   return (
     <div className="min-h-screen p-4 pb-20 relative">
       <div className="max-w-md mx-auto">
-        <div className="flex justify-end mt-4 mb-4">
+        {/* Header with Logo and Theme Toggle */}
+        <div className="flex items-center justify-between mt-4 mb-4">
+          <Logo fontFamily="'Poppins', sans-serif" />
           <ThemeToggle />
         </div>
         
-        {/* Animated Title */}
-        <AnimatedTitle fontFamily="'Poppins', sans-serif" color="white" />
+        {/* Dynamic Workout Title */}
+        <WorkoutSubtitle fontFamily="'Poppins', sans-serif" color="white" />
+        
+        {/* Workout Count Text */}
+        <WorkoutCountText />
         
         {/* Backup Notification */}
         <BackupNotification />
