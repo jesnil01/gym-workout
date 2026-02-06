@@ -6,17 +6,38 @@ import { Button } from './ui/button';
 import { Download, X } from 'lucide-react';
 
 export function BackupNotification() {
-  const { dbReady, exportBackup } = useIndexedDB();
+  const { dbReady, exportBackup, getAllLogs, getAllExercises } = useIndexedDB();
   const [showNotification, setShowNotification] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (dbReady) {
-      // Check if reminder should be shown
-      setShowNotification(shouldShowBackupReminder());
+      // Check if database has any data before showing backup reminder
+      const checkDatabaseAndShowReminder = async () => {
+        try {
+          const [logs, exercises] = await Promise.all([
+            getAllLogs(),
+            getAllExercises()
+          ]);
+          
+          // Only show backup reminder if there's data in the database
+          const hasData = logs.length > 0 || exercises.length > 0;
+          
+          if (hasData && shouldShowBackupReminder()) {
+            setShowNotification(true);
+          } else {
+            setShowNotification(false);
+          }
+        } catch (err) {
+          console.error('Failed to check database:', err);
+          setShowNotification(false);
+        }
+      };
+      
+      checkDatabaseAndShowReminder();
     }
-  }, [dbReady]);
+  }, [dbReady, getAllLogs, getAllExercises]);
 
   const handleDownload = async () => {
     if (!dbReady) return;

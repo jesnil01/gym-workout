@@ -296,18 +296,7 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
             </div>
           </CardContent>
         </Card>
-      ) : (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Weight Progressions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CardDescription>
-              Complete exercises successfully with higher weight/time to see progressions here
-            </CardDescription>
-          </CardContent>
-        </Card>
-      )}
+      ) : null}
     </div>
   );
 }
