@@ -6,12 +6,13 @@ import { getMockWeightProgressions, getMockCompletedSessions, getMockBodyWeights
 import { sessions } from '../config/sessions';
 import { ArrowUp, ArrowDown, Minus, Sparkles, Scale } from 'lucide-react';
 import type { BodyWeightEntry } from '../db/indexedDB';
+import { formatTime, formatPace } from '../lib/utils';
 
 interface DashboardProps {
-  onSelectSession?: (sessionId: string) => void;
+  refreshKey?: number;
 }
 
-export function Dashboard({ onSelectSession }: DashboardProps) {
+export function Dashboard({ refreshKey }: DashboardProps) {
   const { dbReady, getAllLogs, getAllBodyWeights } = useIndexedDB();
   const [progressions, setProgressions] = useState<Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>>(new Map());
   const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
@@ -97,7 +98,7 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
     };
 
     loadData();
-  }, [dbReady, getAllLogs, getAllBodyWeights, useMockData]);
+  }, [dbReady, getAllLogs, getAllBodyWeights, useMockData, refreshKey]);
 
   if (loading) {
     return (
@@ -134,6 +135,10 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
         return { border: 'border-l-4 border-l-green-400', bg: 'bg-green-50/50 dark:bg-green-950/30' };
       case 'S':
         return { border: 'border-l-4 border-l-purple-400', bg: 'bg-purple-50/50 dark:bg-purple-950/30' };
+      case 'running':
+        return { border: 'border-l-4 border-l-red-400', bg: 'bg-red-50/50 dark:bg-red-950/30' };
+      case 'floorball':
+        return { border: 'border-l-4 border-l-orange-400', bg: 'bg-orange-50/50 dark:bg-orange-950/30' };
       default:
         return { border: 'border-l-4 border-l-gray-400', bg: 'bg-gray-50/50 dark:bg-gray-950/30' };
     }
@@ -176,6 +181,7 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
             <div className="space-y-2">
               {completedSessions.slice(0, 10).map((session) => {
                 const colors = getSessionColor(session.sessionId);
+                const isCardio = session.type === 'cardio';
                 return (
                 <div 
                   key={`${session.sessionId}-${session.timestamp}`}
@@ -183,7 +189,15 @@ export function Dashboard({ onSelectSession }: DashboardProps) {
                 >
                   <div className="flex-1">
                     <div className="font-medium text-sm">{session.sessionName}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{formatSessionDate(session.timestamp)}</div>
+                    {isCardio && session.time !== undefined ? (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {formatTime(session.time)}
+                        {session.pace !== undefined && ` • Pace: ${formatPace(session.pace)}`}
+                        <span className="ml-2">• {formatSessionDate(session.timestamp)}</span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground mt-0.5">{formatSessionDate(session.timestamp)}</div>
+                    )}
                   </div>
                 </div>
                 );

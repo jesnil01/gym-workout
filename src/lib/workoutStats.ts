@@ -5,6 +5,9 @@ export interface CompletedSession {
   sessionId: string;
   sessionName: string;
   timestamp: number;
+  type?: 'cardio';
+  time?: number; // Time in seconds
+  pace?: number; // Pace per km in minutes (only for running)
 }
 
 /**
@@ -72,13 +75,17 @@ export function formatWeightProgression(
  */
 export function getCompletedSessions(logs: WorkoutLogEntry[]): CompletedSession[] {
   // Create a map to store unique sessions by sessionId + date
-  const sessionMap = new Map<string, { sessionId: string; timestamp: number }>();
+  const sessionMap = new Map<string, { sessionId: string; timestamp: number; type?: 'cardio'; time?: number; pace?: number }>();
   
   // Create a map of sessionId to sessionName
   const sessionNameMap = new Map<string, string>();
   sessions.forEach(session => {
     sessionNameMap.set(session.id, session.name);
   });
+  
+  // Add cardio session names
+  sessionNameMap.set('running', 'Running');
+  sessionNameMap.set('floorball', 'Floorball');
   
   // Group logs by sessionId + date
   logs.forEach(log => {
@@ -90,27 +97,43 @@ export function getCompletedSessions(logs: WorkoutLogEntry[]): CompletedSession[
     const date = new Date(log.timestamp);
     const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
     
-    // If this session+date combo doesn't exist, or this log is earlier (use earliest timestamp for the day)
+    // If this session+date combo doesn't exist, create it
     if (!sessionMap.has(dateKey)) {
       sessionMap.set(dateKey, {
         sessionId: log.sessionId,
-        timestamp: log.timestamp
+        timestamp: log.timestamp,
+        type: log.type,
+        time: log.time,
+        pace: log.pace
       });
     } else {
-      // Use the earliest timestamp from that day
+      // For cardio sessions, use the most recent timestamp and data
+      // For regular sessions, use the earliest timestamp (when workout started)
       const existing = sessionMap.get(dateKey)!;
-      if (log.timestamp < existing.timestamp) {
+      if (log.type === 'cardio') {
+        // Cardio: always update to most recent
         existing.timestamp = log.timestamp;
+        existing.type = log.type;
+        existing.time = log.time;
+        existing.pace = log.pace;
+      } else {
+        // Regular sessions: use earliest timestamp
+        if (log.timestamp < existing.timestamp) {
+          existing.timestamp = log.timestamp;
+        }
       }
     }
   });
   
   // Convert to array and add session names
   const completedSessions: CompletedSession[] = Array.from(sessionMap.values())
-    .map(({ sessionId, timestamp }) => ({
+    .map(({ sessionId, timestamp, type, time, pace }) => ({
       sessionId,
       sessionName: sessionNameMap.get(sessionId) || `Session ${sessionId}`,
-      timestamp
+      timestamp,
+      type,
+      time,
+      pace
     }))
     .sort((a, b) => b.timestamp - a.timestamp); // Sort by most recent first
   

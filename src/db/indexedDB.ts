@@ -1,5 +1,5 @@
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
@@ -19,6 +19,9 @@ export interface WorkoutLogEntry {
   completed: boolean;
   timestamp: number;
   sessionId: string;
+  type?: 'cardio';
+  time?: number; // Time in seconds
+  pace?: number; // Pace per km in minutes (only for running)
 }
 
 export interface BodyWeightEntry {
