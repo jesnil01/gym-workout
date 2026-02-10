@@ -246,11 +246,11 @@ export function Dashboard({ refreshKey }: DashboardProps) {
         </Card>
       ) : null}
 
-      {/* Weight Progressions */}
+      {/* Gym Progressions */}
       {progressionArray.length > 0 ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Weight Progressions</CardTitle>
+            <CardTitle className="text-lg">Gym Progressions</CardTitle>
             <CardDescription>Completed successfully with higher weight/time</CardDescription>
           </CardHeader>
           <CardContent>
