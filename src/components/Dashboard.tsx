@@ -224,7 +224,7 @@ export function Dashboard({ refreshKey }: DashboardProps) {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Scale className="h-5 w-5" />
-              Weight Logged
+              Weight Log
             </CardTitle>
             <CardDescription>Recent weight entries</CardDescription>
           </CardHeader>
@@ -236,7 +236,7 @@ export function Dashboard({ refreshKey }: DashboardProps) {
                   className="flex items-center justify-between py-2.5 px-3 rounded-md border-r border-t border-b border-l-4 border-l-orange-400 bg-orange-50/50 dark:bg-orange-950/30"
                 >
                   <div className="flex-1">
-                    <div className="font-medium text-sm">Weight logged</div>
+                    <div className="font-medium text-sm">{entry.weight} kg</div>
                     <div className="text-xs text-muted-foreground mt-0.5">{formatSessionDate(entry.timestamp)}</div>
                   </div>
                 </div>
