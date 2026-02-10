@@ -37,3 +37,16 @@ export function formatPace(paceMinutes: number): string {
   
   return `${minutes}:${seconds.toString().padStart(2, '0')}/km`;
 }
+
+/**
+ * Start of current week (Monday 00:00:00) in local time, as timestamp.
+ */
+export function getMondayOfThisWeek(): number {
+  const date = new Date();
+  const day = date.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday.getTime();
+}

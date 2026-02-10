@@ -6,7 +6,7 @@ import { getMockWeightProgressions, getMockCompletedSessions, getMockBodyWeights
 import { sessions } from '../config/sessions';
 import { ArrowUp, ArrowDown, Minus, Sparkles, Scale } from 'lucide-react';
 import type { BodyWeightEntry } from '../db/indexedDB';
-import { formatTime, formatPace } from '../lib/utils';
+import { formatTime, formatPace, getMondayOfThisWeek } from '../lib/utils';
 
 interface DashboardProps {
   refreshKey?: number;
@@ -144,6 +144,17 @@ export function Dashboard({ refreshKey }: DashboardProps) {
     }
   };
 
+  // Week goals: count sessions from Monday this week
+  const mondayThisWeek = getMondayOfThisWeek();
+  const cardioThisWeek = completedSessions.filter(
+    (s) => s.timestamp >= mondayThisWeek && s.type === 'cardio'
+  ).length;
+  const gymThisWeek = completedSessions.filter(
+    (s) => s.timestamp >= mondayThisWeek && s.type !== 'cardio'
+  ).length;
+  const cardioProgress = Math.min(1, cardioThisWeek / 1);
+  const gymProgress = Math.min(1, gymThisWeek / 2);
+
   // Helper function to format session date
   const formatSessionDate = (timestamp: number): string => {
     const now = Date.now();
@@ -167,8 +178,84 @@ export function Dashboard({ refreshKey }: DashboardProps) {
     }
   };
 
+  // Circular progress indicator (0–1) with count in center
+  const ProgressCircle = ({
+    progress,
+    countLabel,
+    label,
+    title,
+  }: {
+    progress: number;
+    countLabel: string;
+    label: string;
+    title: string;
+  }) => {
+    const size = 56;
+    const stroke = 4;
+    const r = (size - stroke) / 2;
+    const circumference = 2 * Math.PI * r;
+    const offset = circumference * (1 - progress);
+    const cx = size / 2;
+    const cy = size / 2;
+    return (
+      <div className="flex flex-col items-center gap-1" title={title}>
+        <svg width={size} height={size} className="shrink-0 text-foreground" aria-hidden>
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={stroke}
+            className="text-muted-foreground/40"
+          />
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={stroke}
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${cx} ${cy})`}
+            className="text-primary transition-[stroke-dashoffset]"
+          />
+          <text
+            x={cx}
+            y={cy}
+            dominantBaseline="middle"
+            textAnchor="middle"
+            fill="currentColor"
+            className="text-sm font-medium"
+          >
+            {countLabel}
+          </text>
+        </svg>
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4 mb-6">
+
+      {/* Session goal circles */}
+      <div className="flex items-center gap-6">
+        <ProgressCircle
+          progress={cardioProgress}
+          countLabel={`${cardioThisWeek}/1`}
+          label="Cardio"
+          title={`Cardio this week: ${cardioThisWeek}/1`}
+        />
+        <ProgressCircle
+          progress={gymProgress}
+          countLabel={`${gymThisWeek}/2`}
+          label="Gym"
+          title={`Gym this week: ${gymThisWeek}/2`}
+        />
+      </div>
 
       {/* Session Log */}
       {completedSessions.length > 0 ? (
