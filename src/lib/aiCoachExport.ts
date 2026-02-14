@@ -32,7 +32,7 @@ export interface WorkoutExercise {
   exerciseName: string;
   value: number;
   unit: string;
-  completed: boolean;
+  allSetsCompletedSuccessfully: boolean;
 }
 
 export interface ExerciseProgression {
@@ -168,8 +168,6 @@ export function groupWorkoutSessions(
   }>();
 
   logs.forEach(log => {
-    if (!log.completed) return;
-
     const date = new Date(log.timestamp);
     const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
 
@@ -205,7 +203,7 @@ export function groupWorkoutSessions(
         exerciseName,
         value: log.value,
         unit,
-        completed: log.completed,
+        allSetsCompletedSuccessfully: log.completed,
       });
 
       // Use earliest timestamp for regular sessions
@@ -236,7 +234,7 @@ export function createExerciseProgressions(
   const progressions: Record<string, ExerciseProgression[]> = {};
 
   logs.forEach(log => {
-    if (!log.completed || log.type === 'cardio') return;
+    if (log.type === 'cardio') return;
 
     if (!progressions[log.exerciseId]) {
       progressions[log.exerciseId] = [];
