@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile } from '../db/indexedDB';
+import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, exportAICoachData, saveCoachFeedback, getAllCoachFeedback, deleteCoachFeedback, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile, type CoachFeedbackEntry } from '../db/indexedDB';
+import type { AICoachExportData } from '../lib/aiCoachExport';
 
 export function useIndexedDB() {
   const [dbReady, setDbReady] = useState(false);
@@ -144,6 +145,42 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const exportAICoachDataFunc = useCallback(async (): Promise<AICoachExportData> => {
+    try {
+      return await exportAICoachData();
+    } catch (err) {
+      console.error('Failed to export AI coach data:', err);
+      throw err;
+    }
+  }, []);
+
+  const saveCoachFeedbackData = useCallback(async (feedback: string): Promise<number> => {
+    try {
+      return await saveCoachFeedback(feedback);
+    } catch (err) {
+      console.error('Failed to save coach feedback:', err);
+      throw err;
+    }
+  }, []);
+
+  const getAllCoachFeedbackData = useCallback(async (): Promise<CoachFeedbackEntry[]> => {
+    try {
+      return await getAllCoachFeedback();
+    } catch (err) {
+      console.error('Failed to get coach feedback:', err);
+      return [];
+    }
+  }, []);
+
+  const deleteCoachFeedbackData = useCallback(async (id: number): Promise<void> => {
+    try {
+      await deleteCoachFeedback(id);
+    } catch (err) {
+      console.error('Failed to delete coach feedback:', err);
+      throw err;
+    }
+  }, []);
+
   return {
     dbReady,
     error,
@@ -160,6 +197,10 @@ export function useIndexedDB() {
     saveBodyWeight: saveBodyWeightData,
     getAllBodyWeights: getAllBodyWeightsData,
     saveUserProfile: saveUserProfileData,
-    getUserProfile: getUserProfileData
+    getUserProfile: getUserProfileData,
+    exportAICoachData: exportAICoachDataFunc,
+    saveCoachFeedback: saveCoachFeedbackData,
+    getAllCoachFeedback: getAllCoachFeedbackData,
+    deleteCoachFeedback: deleteCoachFeedbackData
   };
 }

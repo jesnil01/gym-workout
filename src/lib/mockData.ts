@@ -1,4 +1,4 @@
-import type { WorkoutLogEntry, BodyWeightEntry } from '../db/indexedDB';
+import type { WorkoutLogEntry, BodyWeightEntry, CoachFeedbackEntry, UserProfile } from '../db/indexedDB';
 import type { CompletedSession } from './workoutStats';
 import { sessions } from '../config/sessions';
 
@@ -261,4 +261,62 @@ export function getMockBodyWeights(): BodyWeightEntry[] {
   
   // Sort by most recent first
   return mockWeights.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/**
+ * Get mock coach feedback entries
+ * Returns coach feedback entries spread across the last 14 days
+ */
+export function getMockCoachFeedback(): CoachFeedbackEntry[] {
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+  
+  // Create mock coach feedback entries with realistic feedback content
+  const mockFeedback: CoachFeedbackEntry[] = [
+    {
+      id: 1,
+      feedback: "Great progress on your bench press! You've increased from 65kg to 67.5kg. Focus on maintaining proper form and consider adding an extra set next week if you feel strong.",
+      timestamp: now - (1 * oneDay) // Yesterday
+    },
+    {
+      id: 2,
+      feedback: "Your squat form looks solid. The progression from 85kg to 87.5kg shows consistent strength gains. Make sure to keep your core engaged throughout the movement.",
+      timestamp: now - (3 * oneDay) // 3 days ago
+    },
+    {
+      id: 3,
+      feedback: "I noticed you've been consistent with your workouts - 5 sessions in the last 7 days is excellent! Your body weight has been stable around 75kg, which suggests you're maintaining muscle while potentially losing fat.",
+      timestamp: now - (5 * oneDay) // 5 days ago
+    },
+    {
+      id: 4,
+      feedback: "Your upper body strength is improving well. The incline dumbbell press increase from 20kg to 22.5kg is impressive. Consider focusing on your back exercises to maintain balance.",
+      timestamp: now - (7 * oneDay) // 7 days ago
+    },
+    {
+      id: 5,
+      feedback: "Good work on completing Session S! This full-body session helps maintain overall strength. Keep tracking your progress and don't forget to rest adequately between sessions.",
+      timestamp: now - (10 * oneDay) // 10 days ago
+    },
+    {
+      id: 6,
+      feedback: "Your workout frequency is excellent. Remember to stay hydrated and get enough sleep - these are crucial for recovery and muscle growth. Keep up the great work!",
+      timestamp: now - (12 * oneDay) // 12 days ago
+    }
+  ];
+  
+  // Sort by most recent first
+  return mockFeedback.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/**
+ * Get mock user profile
+ * Returns a user profile with realistic goals and facts
+ */
+export function getMockUserProfile(): UserProfile {
+  return {
+    id: 'user',
+    goal: "Build muscle mass and increase overall strength. Target: Bench press 80kg, Squat 100kg, and Deadlift 120kg within 6 months. Maintain current body weight around 75kg while improving body composition.",
+    facts: "Age: 28, Height: 178cm, Training experience: 2 years. Prefers compound movements and enjoys strength training. Has a home gym setup with barbell, dumbbells, and basic equipment. Typically trains 4-5 times per week. No injuries or limitations. Focuses on progressive overload and tracking all workouts."
+  };
 }

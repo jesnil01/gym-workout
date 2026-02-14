@@ -1,10 +1,11 @@
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
 const BODY_WEIGHT_STORE = 'bodyWeight';
 const PROFILE_STORE = 'profile';
+const COACH_FEEDBACK_STORE = 'coachFeedback';
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -35,6 +36,12 @@ export interface UserProfile {
   id: 'user'; // Always 'user' for singleton pattern
   goal: string;
   facts: string;
+}
+
+export interface CoachFeedbackEntry {
+  id?: number;
+  feedback: string;
+  timestamp: number;
 }
 
 /**
@@ -96,6 +103,15 @@ export function initDB(): Promise<IDBDatabase> {
         db.createObjectStore(PROFILE_STORE, {
           keyPath: 'id'
         });
+      }
+
+      // Create coachFeedback object store
+      if (!db.objectStoreNames.contains(COACH_FEEDBACK_STORE)) {
+        const coachFeedbackStore = db.createObjectStore(COACH_FEEDBACK_STORE, {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        coachFeedbackStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
 
       // Migration from version 1 to 2: rename weight to value
@@ -512,4 +528,110 @@ export async function getUserProfile(): Promise<UserProfile | null> {
 
     request.onerror = () => reject(new Error('Failed to get user profile'));
   });
+}
+
+/**
+ * Save coach feedback entry to the database
+ * @param {string} feedback - Feedback text from AI coach
+ * @returns {Promise<number>} - Returns the auto-generated ID
+ */
+export async function saveCoachFeedback(feedback: string): Promise<number> {
+  // Validate feedback is not empty
+  if (!feedback || feedback.trim().length === 0) {
+    throw new Error('Feedback cannot be empty');
+  }
+
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([COACH_FEEDBACK_STORE], 'readwrite');
+    const store = transaction.objectStore(COACH_FEEDBACK_STORE);
+    
+    const entry: CoachFeedbackEntry = {
+      feedback: feedback.trim(),
+      timestamp: Date.now()
+    };
+
+    const request = store.add(entry);
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(new Error('Failed to save coach feedback'));
+  });
+}
+
+/**
+ * Get all coach feedback entries sorted by timestamp (descending)
+ * @returns {Promise<CoachFeedbackEntry[]>} - Array of coach feedback entries
+ */
+export async function getAllCoachFeedback(): Promise<CoachFeedbackEntry[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([COACH_FEEDBACK_STORE], 'readonly');
+    const store = transaction.objectStore(COACH_FEEDBACK_STORE);
+    const index = store.index('timestamp');
+    const request = index.getAll();
+
+    request.onsuccess = () => {
+      const entries = request.result as CoachFeedbackEntry[];
+      // Sort by timestamp descending (most recent first)
+      entries.sort((a, b) => b.timestamp - a.timestamp);
+      resolve(entries);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get coach feedback'));
+  });
+}
+
+/**
+ * Delete coach feedback entry from the database
+ * @param {number} id - ID of the feedback entry to delete
+ * @returns {Promise<void>}
+ */
+export async function deleteCoachFeedback(id: number): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([COACH_FEEDBACK_STORE], 'readwrite');
+    const store = transaction.objectStore(COACH_FEEDBACK_STORE);
+    const request = store.delete(id);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error('Failed to delete coach feedback'));
+  });
+}
+
+/**
+ * Export all data in AI coach friendly format
+ * @returns {Promise<import('../lib/aiCoachExport').AICoachExportData>} - AI coach export data
+ */
+export async function exportAICoachData(): Promise<import('../lib/aiCoachExport').AICoachExportData> {
+  // Use dynamic import to avoid circular dependencies
+  const aiCoachExport = await import('../lib/aiCoachExport');
+
+  const [exercises, workoutLogs, bodyWeights, userProfile, coachFeedback] = await Promise.all([
+    getAllExercises(),
+    getAllWorkoutLogs(),
+    getAllBodyWeights(),
+    getUserProfile(),
+    getAllCoachFeedback()
+  ]);
+
+  // Transform data
+  const workoutSessions = aiCoachExport.groupWorkoutSessions(workoutLogs, exercises);
+  const exerciseProgressions = aiCoachExport.createExerciseProgressions(workoutLogs);
+  const bodyWeightLog = aiCoachExport.formatBodyWeightLog(bodyWeights);
+  const statistics = aiCoachExport.calculateStatistics(workoutLogs, workoutSessions);
+  const sessionStructure = aiCoachExport.formatSessionStructure();
+
+  return {
+    exportDate: new Date().toISOString(),
+    user: {
+      goal: userProfile?.goal || '',
+      facts: userProfile?.facts || '',
+    },
+    workoutSessions,
+    exerciseProgressions,
+    bodyWeightLog,
+    statistics,
+    sessionStructure,
+    coachFeedback,
+  };
 }
