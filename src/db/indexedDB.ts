@@ -1,9 +1,10 @@
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
 const BODY_WEIGHT_STORE = 'bodyWeight';
+const PROFILE_STORE = 'profile';
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -28,6 +29,12 @@ export interface BodyWeightEntry {
   id?: number;
   weight: number; // Weight in kg with one decimal precision
   timestamp: number;
+}
+
+export interface UserProfile {
+  id: 'user'; // Always 'user' for singleton pattern
+  goal: string;
+  facts: string;
 }
 
 /**
@@ -82,6 +89,13 @@ export function initDB(): Promise<IDBDatabase> {
           autoIncrement: true
         });
         bodyWeightStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Create profile object store (singleton pattern)
+      if (!db.objectStoreNames.contains(PROFILE_STORE)) {
+        db.createObjectStore(PROFILE_STORE, {
+          keyPath: 'id'
+        });
       }
 
       // Migration from version 1 to 2: rename weight to value
@@ -453,5 +467,49 @@ export async function getAllBodyWeights(): Promise<BodyWeightEntry[]> {
     };
 
     request.onerror = () => reject(new Error('Failed to get body weights'));
+  });
+}
+
+/**
+ * Save user profile to the database
+ * @param {UserProfile} profile - User profile object with goal and facts
+ * @returns {Promise<void>}
+ */
+export async function saveUserProfile(profile: UserProfile): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([PROFILE_STORE], 'readwrite');
+    const store = transaction.objectStore(PROFILE_STORE);
+    
+    const profileEntry: UserProfile = {
+      id: 'user',
+      goal: profile.goal || '',
+      facts: profile.facts || ''
+    };
+
+    const request = store.put(profileEntry);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error('Failed to save user profile'));
+  });
+}
+
+/**
+ * Get user profile from the database
+ * @returns {Promise<UserProfile | null>} - User profile or null if none exists
+ */
+export async function getUserProfile(): Promise<UserProfile | null> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([PROFILE_STORE], 'readonly');
+    const store = transaction.objectStore(PROFILE_STORE);
+    const request = store.get('user');
+
+    request.onsuccess = () => {
+      const profile = request.result as UserProfile | undefined;
+      resolve(profile || null);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get user profile'));
   });
 }

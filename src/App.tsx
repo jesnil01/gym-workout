@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SessionList } from './components/SessionList';
 import { SessionView } from './components/SessionView';
+import { ProfileView } from './components/ProfileView';
 import { useIndexedDB } from './hooks/useIndexedDB';
 import { sessions } from './config/sessions';
 import { ThemeProvider } from './components/theme-provider';
@@ -8,7 +9,7 @@ import { VersionDisplay } from './components/VersionDisplay';
 import { AnimatedBackground } from './components/AnimatedBackground';
 
 function App() {
-  const [currentView, setCurrentView] = useState<'list' | 'session'>('list');
+  const [currentView, setCurrentView] = useState<'list' | 'session' | 'profile'>('list');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const { dbReady, error, saveExerciseData } = useIndexedDB();
 
@@ -42,6 +43,10 @@ function App() {
   const handleSelectSession = (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setCurrentView('session');
+  };
+
+  const handleNavigateToProfile = () => {
+    setCurrentView('profile');
   };
 
   const handleBack = () => {
@@ -78,7 +83,9 @@ function App() {
         <div className="App min-h-screen flex flex-col relative z-10">
           <div className="flex-1">
             {currentView === 'list' ? (
-              <SessionList onSelectSession={handleSelectSession} />
+              <SessionList onSelectSession={handleSelectSession} onNavigateToProfile={handleNavigateToProfile} />
+            ) : currentView === 'profile' ? (
+              <ProfileView onBack={handleBack} />
             ) : selectedSessionId ? (
               <SessionView sessionId={selectedSessionId} onBack={handleBack} />
             ) : null}

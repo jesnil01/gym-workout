@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry } from '../db/indexedDB';
+import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile } from '../db/indexedDB';
 
 export function useIndexedDB() {
   const [dbReady, setDbReady] = useState(false);
@@ -126,6 +126,24 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const saveUserProfileData = useCallback(async (profile: UserProfile): Promise<void> => {
+    try {
+      await saveUserProfile(profile);
+    } catch (err) {
+      console.error('Failed to save user profile:', err);
+      throw err;
+    }
+  }, []);
+
+  const getUserProfileData = useCallback(async (): Promise<UserProfile | null> => {
+    try {
+      return await getUserProfile();
+    } catch (err) {
+      console.error('Failed to get user profile:', err);
+      return null;
+    }
+  }, []);
+
   return {
     dbReady,
     error,
@@ -140,6 +158,8 @@ export function useIndexedDB() {
     exportBackup: exportBackupData,
     importBackup: importBackupData,
     saveBodyWeight: saveBodyWeightData,
-    getAllBodyWeights: getAllBodyWeightsData
+    getAllBodyWeights: getAllBodyWeightsData,
+    saveUserProfile: saveUserProfileData,
+    getUserProfile: getUserProfileData
   };
 }

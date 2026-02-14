@@ -11,6 +11,7 @@ import { BackupNotification } from './BackupNotification';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useIndexedDB } from '../hooks/useIndexedDB';
+import { User } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,9 +23,10 @@ import {
 
 interface SessionListProps {
   onSelectSession: (sessionId: string) => void;
+  onNavigateToProfile?: () => void;
 }
 
-export function SessionList({ onSelectSession }: SessionListProps) {
+export function SessionList({ onSelectSession, onNavigateToProfile }: SessionListProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
   const [weightValue, setWeightValue] = useState('');
@@ -158,10 +160,23 @@ export function SessionList({ onSelectSession }: SessionListProps) {
   return (
     <div className="min-h-screen p-4 pb-20 relative">
       <div className="max-w-md mx-auto">
-        {/* Header with Logo and Theme Toggle */}
+        {/* Header with Logo, Profile Button, and Theme Toggle */}
         <div className="flex items-center justify-between mt-4 mb-4">
           <Logo fontFamily="'Poppins', sans-serif" />
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            {onNavigateToProfile && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onNavigateToProfile}
+                className="h-9 w-9"
+                aria-label="Open profile"
+              >
+                <User className="h-5 w-5" />
+              </Button>
+            )}
+            <ThemeToggle />
+          </div>
         </div>
         
         {/* Dynamic Workout Title */}
