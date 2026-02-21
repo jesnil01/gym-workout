@@ -19,15 +19,17 @@ function App() {
       // Extract all unique exercises from sessions and save them
       const exerciseMap = new Map<string, { id: string; name: string }>();
       sessions.forEach(session => {
-        session.supersets.forEach(superset => {
-          superset.exercises.forEach(exercise => {
-            if (!exerciseMap.has(exercise.id)) {
-              exerciseMap.set(exercise.id, {
-                id: exercise.id,
-                name: exercise.name
-              });
-            }
-          });
+        session.blocks.forEach(block => {
+          if (block.type === 'superset') {
+            block.exercises.forEach(step => {
+              if (!exerciseMap.has(step.id)) {
+                exerciseMap.set(step.id, {
+                  id: step.id,
+                  name: step.name
+                });
+              }
+            });
+          }
         });
       });
 

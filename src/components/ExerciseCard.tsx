@@ -4,17 +4,33 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Input } from './ui/input';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
-import type { Exercise } from '../config/sessions';
+import type { Step } from '../schema/sessionSchema';
 
 interface ExerciseCardProps {
-  exercise: Exercise;
-  sessionId: string;
+  step: Step;
+  sessionId: string; // Passed by parent for session context
   onExerciseUpdate: (exerciseId: string, value: number | null, completed: boolean) => void;
 }
 
-export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: ExerciseCardProps) {
-  const { getLastEntry, getLastNEntries } = useIndexedDB();
-  const isTimeBased = exercise.metricType === 'time';
+function formatStepDescription(step: Step): string {
+  const sets = `${step.sets} sets`;
+  switch (step.target.type) {
+    case 'reps':
+      return `${sets} × ${step.target.reps} reps`;
+    case 'range':
+      return `${sets} × ${step.target.min}-${step.target.max} reps`;
+    case 'time':
+      return `${sets} × ${step.target.seconds}s`;
+    case 'amrap':
+      return `${sets} AMRAP${step.target.capReps ? ` (cap ${step.target.capReps})` : ''}`;
+    default:
+      return sets;
+  }
+}
+
+export function ExerciseCard({ step, sessionId: _sessionId, onExerciseUpdate }: ExerciseCardProps) {
+  const { getLastNEntries } = useIndexedDB();
+  const isTimeBased = step.target.type === 'time';
   const [value, setValue] = useState('');
   const [completed, setCompleted] = useState(false);
   const [lastEntries, setLastEntries] = useState<Array<{ value: number; completed: boolean; timestamp: number }>>([]);
@@ -24,7 +40,7 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
     // Load last 3 entries for this exercise
     const loadLastEntries = async () => {
       try {
-        const entries = await getLastNEntries(exercise.id, 3);
+        const entries = await getLastNEntries(step.id, 3);
         if (entries.length > 0) {
           setLastEntries(entries.map(e => ({
             value: e.value,
@@ -35,14 +51,14 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
           setValue(entries[0].value.toString());
         }
       } catch (err) {
-        console.error(`Failed to load last entries for ${exercise.id}:`, err);
+        console.error(`Failed to load last entries for ${step.id}:`, err);
       } finally {
         setLoading(false);
       }
     };
 
     loadLastEntries();
-  }, [exercise.id, getLastNEntries]);
+  }, [step.id, getLastNEntries]);
 
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -53,7 +69,7 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
       ? (newValue && !isNaN(parseInt(newValue)) && parseInt(newValue) > 0 ? parseInt(newValue) : null)
       : (newValue && !isNaN(parseFloat(newValue)) && parseFloat(newValue) > 0 ? parseFloat(newValue) : null);
 
-    onExerciseUpdate(exercise.id, parsedValue, completed);
+    onExerciseUpdate(step.id, parsedValue, completed);
   };
 
   const handleCompletedChange = (checked: boolean) => {
@@ -64,7 +80,7 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
       ? (value && !isNaN(parseInt(value)) && parseInt(value) > 0 ? parseInt(value) : null)
       : (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0 ? parseFloat(value) : null);
 
-    onExerciseUpdate(exercise.id, parsedValue, checked);
+    onExerciseUpdate(step.id, parsedValue, checked);
   };
 
   const formatValue = (val: number): string => {
@@ -85,9 +101,9 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
   return (
     <Card className="mb-3">
       <CardHeader>
-        <CardTitle className="text-lg">{exercise.name}</CardTitle>
+        <CardTitle className="text-lg">{step.name}</CardTitle>
         <CardDescription>
-          {isTimeBased ? `${exercise.sets} sets` : `${exercise.sets} × ${exercise.reps}`}
+          {formatStepDescription(step)}
         </CardDescription>
         {lastEntries.length > 0 && (
           <CardDescription className="text-xs mt-1 space-y-1">
@@ -105,11 +121,11 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-2">
-          <Label htmlFor={`value-${exercise.id}`}>
+          <Label htmlFor={`value-${step.id}`}>
             {isTimeBased ? 'Time (seconds)' : 'Weight (kg)'}
           </Label>
           <Input
-            id={`value-${exercise.id}`}
+            id={`value-${step.id}`}
             type="number"
             inputMode={isTimeBased ? "numeric" : "decimal"}
             step={isTimeBased ? "1" : "0.5"}
@@ -123,12 +139,12 @@ export function ExerciseCard({ exercise, sessionId, onExerciseUpdate }: Exercise
 
         <div className="flex items-center space-x-2">
           <Checkbox
-            id={`completed-${exercise.id}`}
+            id={`completed-${step.id}`}
             checked={completed}
             onCheckedChange={handleCompletedChange}
           />
           <Label
-            htmlFor={`completed-${exercise.id}`}
+            htmlFor={`completed-${step.id}`}
             className="text-sm font-medium cursor-pointer"
           >
             Completed successfully

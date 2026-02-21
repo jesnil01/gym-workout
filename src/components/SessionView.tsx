@@ -5,7 +5,7 @@ import { useIndexedDB } from '../hooks/useIndexedDB';
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { ThemeToggle } from './theme-toggle';
-import type { Session } from '../config/sessions';
+import type { SessionV2 } from '../schema/sessionSchema';
 
 interface SessionViewProps {
   sessionId: string;
@@ -20,7 +20,7 @@ interface SessionEntry {
 }
 
 export function SessionView({ sessionId, onBack }: SessionViewProps) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<SessionV2 | null>(null);
   const [sessionEntries, setSessionEntries] = useState<Record<string, SessionEntry>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
 
   useEffect(() => {
     const foundSession = sessions.find(s => s.id === sessionId);
-    setSession(foundSession);
+    setSession(foundSession ?? null);
     // Reset session entries when session changes
     setSessionEntries({});
     setSaveError(null);
@@ -117,15 +117,17 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
 
       {/* Content */}
       <div className="px-4 pt-4">
-        {session.supersets.map((superset, index) => (
-          <SupersetGroup
-            key={`${sessionId}-superset-${index}`}
-            superset={superset}
-            sessionId={sessionId}
-            onExerciseUpdate={handleExerciseUpdate}
-            sectionNumber={index + 1}
-          />
-        ))}
+        {session.blocks.map((block, index) =>
+          block.type === 'superset' ? (
+            <SupersetGroup
+              key={`${sessionId}-superset-${index}`}
+              block={block}
+              sessionId={sessionId}
+              onExerciseUpdate={handleExerciseUpdate}
+              sectionNumber={index + 1}
+            />
+          ) : null
+        )}
       </div>
 
       {/* Complete Session Button - Fixed at bottom */}

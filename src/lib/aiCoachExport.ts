@@ -1,5 +1,6 @@
 import type { WorkoutLogEntry, Exercise, BodyWeightEntry, UserProfile, CoachFeedbackEntry } from '../db/indexedDB';
 import { sessions } from '../config/sessions';
+import type { SupersetBlock } from '../schema/sessionSchema';
 
 export interface AICoachExportData {
   exportDate: string;
@@ -464,21 +465,34 @@ function generateWeeklySummaries(sessions: WorkoutSession[]): WeeklySummary[] {
 }
 
 /**
- * Format session structure for export
+ * Format session structure for export (v2 blocks -> legacy SessionStructure format)
  */
 export function formatSessionStructure(): SessionStructure[] {
   return sessions.map(session => ({
     id: session.id,
     name: session.name,
-    supersets: session.supersets.map(superset => ({
-      rest: superset.rest,
-      exercises: superset.exercises.map(ex => ({
-        id: ex.id,
-        name: ex.name,
-        sets: ex.sets,
-        reps: ex.reps,
-        metricType: ex.metricType,
+    supersets: session.blocks
+      .filter((block): block is SupersetBlock => block.type === 'superset')
+      .map(block => ({
+        rest: block.rest.afterRoundSeconds,
+        exercises: block.exercises.map(step => {
+          const reps: number | string =
+            step.target.type === 'reps'
+              ? step.target.reps
+              : step.target.type === 'range'
+                ? `${step.target.min}-${step.target.max}`
+                : step.target.type === 'time'
+                  ? `${step.target.seconds}s`
+                  : 10;
+          const metricType: 'weight' | 'time' = step.target.type === 'time' ? 'time' : 'weight';
+          return {
+            id: step.id,
+            name: step.name,
+            sets: step.sets,
+            reps,
+            metricType,
+          };
+        }),
       })),
-    })),
   }));
 }

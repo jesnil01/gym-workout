@@ -52,23 +52,25 @@ export function Dashboard({ refreshKey }: DashboardProps) {
           setBodyWeightEntries(bodyWeights);
           
           // Calculate weight progressions
-          const progressionMap = new Map<string, {current: number; previous: number | null; exerciseName: string}>();
+          const progressionMap = new Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>();
           
           // Get all exercises from sessions config (both weight and time)
           const exerciseMap = new Map<string, { name: string; metricType: 'weight' | 'time' }>();
           sessions.forEach(session => {
-            session.supersets.forEach(superset => {
-              superset.exercises.forEach(exercise => {
-                const metricType = exercise.metricType || 'weight';
-                if (!exerciseMap.has(exercise.id)) {
-                  exerciseMap.set(exercise.id, { name: exercise.name, metricType });
-                }
-              });
+            session.blocks.forEach(block => {
+              if (block.type === 'superset') {
+                block.exercises.forEach(step => {
+                  const metricType = step.target.type === 'time' ? 'time' : 'weight';
+                  if (!exerciseMap.has(step.id)) {
+                    exerciseMap.set(step.id, { name: step.name, metricType });
+                  }
+                });
+              }
             });
           });
           
           // For each exercise, get the two most recent completed entries
-          for (const [exerciseId, { name: exerciseName, metricType }] of exerciseMap.entries()) {
+          for (const [exerciseId, { name: exerciseName, metricType: _metricType }] of exerciseMap.entries()) {
             // Filter to only completed exercises, sorted by timestamp
             const completedLogs = allLogs
               .filter(log => log.exerciseId === exerciseId && log.completed === true)
@@ -346,11 +348,13 @@ export function Dashboard({ refreshKey }: DashboardProps) {
                 // Determine if this is a time-based exercise
                 let isTime = false;
                 for (const session of sessions) {
-                  for (const superset of session.supersets) {
-                    const exercise = superset.exercises.find(e => e.id === exerciseId);
-                    if (exercise && exercise.metricType === 'time') {
-                      isTime = true;
-                      break;
+                  for (const block of session.blocks) {
+                    if (block.type === 'superset') {
+                      const step = block.exercises.find(e => e.id === exerciseId);
+                      if (step && step.target.type === 'time') {
+                        isTime = true;
+                        break;
+                      }
                     }
                   }
                   if (isTime) break;

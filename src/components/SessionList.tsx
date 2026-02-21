@@ -206,20 +206,23 @@ export function SessionList({ onSelectSession, onNavigateToProfile }: SessionLis
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 mt-4">
-              {sessions.map((session) => (
-                <Card
-                  key={session.id}
-                  className="cursor-pointer hover:shadow-lg transition-shadow"
-                  onClick={() => handleSelectSession(session.id)}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-xl">{session.name}</CardTitle>
-                    <CardDescription>
-                      {session.supersets.length} superset{session.supersets.length !== 1 ? 's' : ''}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              ))}
+              {sessions.map((session) => {
+                const supersetCount = session.blocks.filter(b => b.type === 'superset').length;
+                return (
+                  <Card
+                    key={session.id}
+                    className="cursor-pointer hover:shadow-lg transition-shadow"
+                    onClick={() => handleSelectSession(session.id)}
+                  >
+                    <CardHeader>
+                      <CardTitle className="text-xl">{session.name}</CardTitle>
+                      <CardDescription>
+                        {supersetCount} superset{supersetCount !== 1 ? 's' : ''}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                );
+              })}
             </div>
           </DialogContent>
         </Dialog>
