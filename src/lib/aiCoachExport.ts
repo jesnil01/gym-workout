@@ -1,6 +1,5 @@
-import type { WorkoutLogEntry, Exercise, BodyWeightEntry, UserProfile, CoachFeedbackEntry } from '../db/indexedDB';
-import { sessions } from '../config/sessions';
-import type { SupersetBlock } from '../schema/sessionSchema';
+import type { WorkoutLogEntry, Exercise, BodyWeightEntry, CoachFeedbackEntry } from '../db/indexedDB';
+import type { SupersetBlock, SessionV2 } from '../schema/sessionSchema';
 
 export interface AICoachExportData {
   exportDate: string;
@@ -142,7 +141,8 @@ function formatDate(timestamp: number): string {
  */
 export function groupWorkoutSessions(
   logs: WorkoutLogEntry[],
-  exercises: Exercise[]
+  exercises: Exercise[],
+  sessions: SessionV2[]
 ): WorkoutSession[] {
   const exerciseMap = new Map<string, string>();
   exercises.forEach(ex => {
@@ -467,7 +467,7 @@ function generateWeeklySummaries(sessions: WorkoutSession[]): WeeklySummary[] {
 /**
  * Format session structure for export (v2 blocks -> legacy SessionStructure format)
  */
-export function formatSessionStructure(): SessionStructure[] {
+export function formatSessionStructure(sessions: SessionV2[]): SessionStructure[] {
   return sessions.map(session => ({
     id: session.id,
     name: session.name,

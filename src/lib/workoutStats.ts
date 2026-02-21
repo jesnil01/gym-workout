@@ -1,5 +1,5 @@
 import type { WorkoutLogEntry } from '../db/indexedDB';
-import { sessions } from '../config/sessions';
+import type { SessionV2 } from '../schema/sessionSchema';
 
 export interface CompletedSession {
   sessionId: string;
@@ -73,7 +73,7 @@ export function formatWeightProgression(
  * Groups logs by unique sessionId + date combinations
  * Returns array of completed sessions sorted by most recent first
  */
-export function getCompletedSessions(logs: WorkoutLogEntry[]): CompletedSession[] {
+export function getCompletedSessions(logs: WorkoutLogEntry[], sessions: SessionV2[]): CompletedSession[] {
   // Create a map to store unique sessions by sessionId + date
   const sessionMap = new Map<string, { sessionId: string; timestamp: number; type?: 'cardio'; time?: number; pace?: number }>();
   

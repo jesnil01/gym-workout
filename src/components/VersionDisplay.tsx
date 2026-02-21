@@ -66,7 +66,11 @@ export function VersionDisplay() {
       const result = await importBackup(backupData);
       
       if (result.success) {
-        setImportMessage(`Imported ${result.exercisesImported} exercises and ${result.workoutLogsImported} workout logs`);
+        const parts = [`${result.exercisesImported} exercises`, `${result.workoutLogsImported} workout logs`];
+        if (result.sessionsImported != null && result.sessionsImported > 0) {
+          parts.push(`${result.sessionsImported} sessions`);
+        }
+        setImportMessage(`Imported ${parts.join(', ')}`);
         // Refresh page after a short delay to show updated data
         setTimeout(() => {
           window.location.reload();

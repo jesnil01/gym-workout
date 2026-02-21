@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { sessions } from '../config/sessions';
+import { useSessionsContext } from '../contexts/SessionsContext';
 import { Button } from './ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { ThemeToggle } from './theme-toggle';
@@ -27,6 +27,7 @@ interface SessionListProps {
 }
 
 export function SessionList({ onSelectSession, onNavigateToProfile }: SessionListProps) {
+  const { sessions } = useSessionsContext();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
   const [weightValue, setWeightValue] = useState('');

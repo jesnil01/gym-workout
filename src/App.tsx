@@ -3,58 +3,76 @@ import { SessionList } from './components/SessionList';
 import { SessionView } from './components/SessionView';
 import { ProfileView } from './components/ProfileView';
 import { useIndexedDB } from './hooks/useIndexedDB';
-import { sessions } from './config/sessions';
+import { SessionsProvider, useSessionsContext } from './contexts/SessionsContext';
 import { ThemeProvider } from './components/theme-provider';
 import { VersionDisplay } from './components/VersionDisplay';
 import { AnimatedBackground } from './components/AnimatedBackground';
 
-function App() {
+function AppContent() {
   const [currentView, setCurrentView] = useState<'list' | 'session' | 'profile'>('list');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const { dbReady, error, saveExerciseData } = useIndexedDB();
+  const { sessions, loading } = useSessionsContext();
+  const { saveExerciseData } = useIndexedDB();
 
-  // Initialize exercises in database on first load
   useEffect(() => {
-    if (dbReady) {
-      // Extract all unique exercises from sessions and save them
+    if (!loading && sessions.length > 0) {
       const exerciseMap = new Map<string, { id: string; name: string }>();
       sessions.forEach(session => {
         session.blocks.forEach(block => {
           if (block.type === 'superset') {
             block.exercises.forEach(step => {
               if (!exerciseMap.has(step.id)) {
-                exerciseMap.set(step.id, {
-                  id: step.id,
-                  name: step.name
-                });
+                exerciseMap.set(step.id, { id: step.id, name: step.name });
               }
             });
           }
         });
       });
-
-      // Save all exercises to database
       exerciseMap.forEach(exercise => {
         saveExerciseData(exercise).catch(err => {
           console.error(`Failed to save exercise ${exercise.id}:`, err);
         });
       });
     }
-  }, [dbReady, saveExerciseData]);
+  }, [loading, sessions, saveExerciseData]);
 
   const handleSelectSession = (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setCurrentView('session');
   };
 
-  const handleNavigateToProfile = () => {
-    setCurrentView('profile');
-  };
-
+  const handleNavigateToProfile = () => setCurrentView('profile');
   const handleBack = () => {
     setCurrentView('list');
     setSelectedSessionId(null);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading sessions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1">
+      {currentView === 'list' ? (
+        <SessionList onSelectSession={handleSelectSession} onNavigateToProfile={handleNavigateToProfile} />
+      ) : currentView === 'profile' ? (
+        <ProfileView onBack={handleBack} />
+      ) : selectedSessionId ? (
+        <SessionView sessionId={selectedSessionId} onBack={handleBack} />
+      ) : null}
+    </div>
+  );
+}
+
+function App() {
+  const { dbReady, error } = useIndexedDB();
 
   if (error) {
     return (
@@ -80,21 +98,15 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="light" storageKey="gym-workout-theme">
-      <div className="relative min-h-screen">
-        <AnimatedBackground />
-        <div className="App min-h-screen flex flex-col relative z-10">
-          <div className="flex-1">
-            {currentView === 'list' ? (
-              <SessionList onSelectSession={handleSelectSession} onNavigateToProfile={handleNavigateToProfile} />
-            ) : currentView === 'profile' ? (
-              <ProfileView onBack={handleBack} />
-            ) : selectedSessionId ? (
-              <SessionView sessionId={selectedSessionId} onBack={handleBack} />
-            ) : null}
+      <SessionsProvider>
+        <div className="relative min-h-screen">
+          <AnimatedBackground />
+          <div className="App min-h-screen flex flex-col relative z-10">
+            <AppContent />
+            <VersionDisplay />
           </div>
-          <VersionDisplay />
         </div>
-      </div>
+      </SessionsProvider>
     </ThemeProvider>
   );
 }

@@ -1,11 +1,16 @@
+import type { SessionV2 } from '../schema/sessionSchema';
+import { SessionSchemaV2 } from '../schema/sessionSchema';
+import { sessions as defaultSessions } from '../config/sessions';
+
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
 const BODY_WEIGHT_STORE = 'bodyWeight';
 const PROFILE_STORE = 'profile';
 const COACH_FEEDBACK_STORE = 'coachFeedback';
+const SESSIONS_STORE = 'sessions';
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -112,6 +117,16 @@ export function initDB(): Promise<IDBDatabase> {
           autoIncrement: true
         });
         coachFeedbackStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Create sessions object store (v7) and seed with default sessions
+      if (!db.objectStoreNames.contains(SESSIONS_STORE)) {
+        db.createObjectStore(SESSIONS_STORE, { keyPath: 'id' });
+        const transaction = (event.target as IDBOpenDBRequest).transaction!;
+        const store = transaction.objectStore(SESSIONS_STORE);
+        for (const session of defaultSessions) {
+          store.put(session);
+        }
       }
 
       // Migration from version 1 to 2: rename weight to value
@@ -331,11 +346,72 @@ export async function getAllExercises(): Promise<Exercise[]> {
   });
 }
 
+/**
+ * Get all sessions from the database
+ * @returns {Promise<SessionV2[]>} - Array of all sessions
+ */
+export async function getAllSessions(): Promise<SessionV2[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SESSIONS_STORE], 'readonly');
+    const store = transaction.objectStore(SESSIONS_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const sessions = request.result as SessionV2[];
+      resolve(sessions);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get all sessions'));
+  });
+}
+
+/**
+ * Get a session by ID
+ * @param {string} id - Session ID
+ * @returns {Promise<SessionV2 | null>} - Session or null if not found
+ */
+export async function getSession(id: string): Promise<SessionV2 | null> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SESSIONS_STORE], 'readonly');
+    const store = transaction.objectStore(SESSIONS_STORE);
+    const request = store.get(id);
+
+    request.onsuccess = () => {
+      const session = request.result as SessionV2 | undefined;
+      resolve(session || null);
+    };
+
+    request.onerror = () => reject(new Error('Failed to get session'));
+  });
+}
+
+/**
+ * Save a session to the database (validates with Zod)
+ * @param {SessionV2} session - Session to save
+ * @returns {Promise<void>}
+ */
+export async function saveSession(session: SessionV2): Promise<void> {
+  SessionSchemaV2.parse(session);
+
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SESSIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(SESSIONS_STORE);
+    const request = store.put(session);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error('Failed to save session'));
+  });
+}
+
 export interface BackupData {
   version: string;
   exportDate: number;
   exercises: Exercise[];
   workoutLogs: WorkoutLogEntry[];
+  sessions?: SessionV2[];
 }
 
 /**
@@ -343,16 +419,18 @@ export interface BackupData {
  * @returns {Promise<BackupData>} - Backup data object with all exercises and workout logs
  */
 export async function exportBackup(): Promise<BackupData> {
-  const [exercises, workoutLogs] = await Promise.all([
+  const [exercises, workoutLogs, sessions] = await Promise.all([
     getAllExercises(),
-    getAllWorkoutLogs()
+    getAllWorkoutLogs(),
+    getAllSessions()
   ]);
 
   return {
     version: '1.0.0',
     exportDate: Date.now(),
     exercises,
-    workoutLogs
+    workoutLogs,
+    sessions
   };
 }
 
@@ -360,6 +438,7 @@ export interface ImportResult {
   success: boolean;
   exercisesImported: number;
   workoutLogsImported: number;
+  sessionsImported?: number;
   error?: string;
 }
 
@@ -377,6 +456,27 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
 
     let exercisesImported = 0;
     let workoutLogsImported = 0;
+    let sessionsImported = 0;
+
+    // Import sessions (if present in backup - optional for backward compatibility)
+    if (backupData.sessions && Array.isArray(backupData.sessions) && backupData.sessions.length > 0) {
+      const db = await initDB();
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([SESSIONS_STORE], 'readwrite');
+        const store = transaction.objectStore(SESSIONS_STORE);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(new Error('Failed to import sessions'));
+        for (const session of backupData.sessions!) {
+          try {
+            const validated = SessionSchemaV2.parse(session);
+            store.put(validated);
+            sessionsImported++;
+          } catch (err) {
+            console.error(`Failed to import session ${session.id}:`, err);
+          }
+        }
+      });
+    }
 
     // Import exercises
     for (const exercise of backupData.exercises) {
@@ -417,13 +517,15 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
     return {
       success: true,
       exercisesImported,
-      workoutLogsImported
+      workoutLogsImported,
+      sessionsImported
     };
   } catch (err) {
     return {
       success: false,
       exercisesImported: 0,
       workoutLogsImported: 0,
+      sessionsImported: 0,
       error: err instanceof Error ? err.message : 'Failed to import backup'
     };
   }
@@ -606,20 +708,21 @@ export async function exportAICoachData(): Promise<import('../lib/aiCoachExport'
   // Use dynamic import to avoid circular dependencies
   const aiCoachExport = await import('../lib/aiCoachExport');
 
-  const [exercises, workoutLogs, bodyWeights, userProfile, coachFeedback] = await Promise.all([
+  const [exercises, workoutLogs, bodyWeights, userProfile, coachFeedback, sessions] = await Promise.all([
     getAllExercises(),
     getAllWorkoutLogs(),
     getAllBodyWeights(),
     getUserProfile(),
-    getAllCoachFeedback()
+    getAllCoachFeedback(),
+    getAllSessions()
   ]);
 
   // Transform data
-  const workoutSessions = aiCoachExport.groupWorkoutSessions(workoutLogs, exercises);
+  const workoutSessions = aiCoachExport.groupWorkoutSessions(workoutLogs, exercises, sessions);
   const exerciseProgressions = aiCoachExport.createExerciseProgressions(workoutLogs);
   const bodyWeightLog = aiCoachExport.formatBodyWeightLog(bodyWeights);
   const statistics = aiCoachExport.calculateStatistics(workoutLogs, workoutSessions);
-  const sessionStructure = aiCoachExport.formatSessionStructure();
+  const sessionStructure = aiCoachExport.formatSessionStructure(sessions);
 
   return {
     exportDate: new Date().toISOString(),

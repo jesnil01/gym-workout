@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useIndexedDB } from '../hooks/useIndexedDB';
+import { useSessionsContext } from '../contexts/SessionsContext';
 import { getCompletedSessions } from '../lib/workoutStats';
 import { getWorkoutStatus, getWorkoutMessage } from '../lib/workoutMessages';
 import { getMockCompletedSessions } from '../lib/mockData';
@@ -10,6 +11,7 @@ interface WorkoutSubtitleProps {
 }
 
 export function WorkoutSubtitle({ fontFamily = "'Poppins', sans-serif", color }: WorkoutSubtitleProps) {
+  const { sessions } = useSessionsContext();
   const { dbReady, getAllLogs } = useIndexedDB();
   const [message, setMessage] = useState<string>('');
   const [isVisible, setIsVisible] = useState(false);
@@ -26,10 +28,10 @@ export function WorkoutSubtitle({ fontFamily = "'Poppins', sans-serif", color }:
         let completedSessions;
         
         if (useMockData) {
-          completedSessions = getMockCompletedSessions();
+          completedSessions = getMockCompletedSessions(sessions);
         } else {
           const allLogs = await getAllLogs();
-          completedSessions = getCompletedSessions(allLogs);
+          completedSessions = getCompletedSessions(allLogs, sessions);
         }
         
         const status = getWorkoutStatus(completedSessions);
@@ -48,7 +50,7 @@ export function WorkoutSubtitle({ fontFamily = "'Poppins', sans-serif", color }:
     };
 
     loadMessage();
-  }, [dbReady, getAllLogs, useMockData]);
+  }, [dbReady, getAllLogs, useMockData, sessions]);
 
   // Initial visibility animation
   useEffect(() => {

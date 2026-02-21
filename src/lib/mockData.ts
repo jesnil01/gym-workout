@@ -1,6 +1,6 @@
 import type { WorkoutLogEntry, BodyWeightEntry, CoachFeedbackEntry, UserProfile } from '../db/indexedDB';
 import type { CompletedSession } from './workoutStats';
-import { sessions } from '../config/sessions';
+import type { SessionV2 } from '../schema/sessionSchema';
 
 /**
  * Generate mock workout logs for the last 7 days
@@ -178,11 +178,10 @@ export function getMockWeightProgressions(): Map<string, {current: number; previ
  * Get mock completed sessions
  * Returns sessions from days 0, 1, 2, 3, 4, 6 (matching existing mock data)
  */
-export function getMockCompletedSessions(): CompletedSession[] {
+export function getMockCompletedSessions(sessions: SessionV2[]): CompletedSession[] {
   const now = Date.now();
   const oneDay = 24 * 60 * 60 * 1000;
   
-  // Create a map of sessionId to sessionName
   const sessionNameMap = new Map<string, string>();
   sessions.forEach(session => {
     sessionNameMap.set(session.id, session.name);

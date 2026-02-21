@@ -1,3 +1,5 @@
+import type { BackupData } from '../db/indexedDB';
+
 const LAST_BACKUP_KEY = 'gym-workout-last-backup';
 const BACKUP_REMINDER_DAYS = 7;
 

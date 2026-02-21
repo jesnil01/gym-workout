@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { formatWeightProgression, getCompletedSessions, type CompletedSession } from '../lib/workoutStats';
 import { getMockWeightProgressions, getMockCompletedSessions, getMockBodyWeights } from '../lib/mockData';
-import { sessions } from '../config/sessions';
+import { useSessionsContext } from '../contexts/SessionsContext';
 import { ArrowUp, ArrowDown, Minus, Sparkles, Scale } from 'lucide-react';
 import type { BodyWeightEntry } from '../db/indexedDB';
 import { formatTime, formatPace, getMondayOfThisWeek } from '../lib/utils';
@@ -13,6 +13,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ refreshKey }: DashboardProps) {
+  const { sessions } = useSessionsContext();
   const { dbReady, getAllLogs, getAllBodyWeights } = useIndexedDB();
   const [progressions, setProgressions] = useState<Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>>(new Map());
   const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
@@ -32,7 +33,7 @@ export function Dashboard({ refreshKey }: DashboardProps) {
       if (useMockData) {
         // Use mock data
         const mockProgressions = getMockWeightProgressions();
-        const mockSessions = getMockCompletedSessions();
+        const mockSessions = getMockCompletedSessions(sessions);
         const mockBodyWeights = getMockBodyWeights();
         setProgressions(mockProgressions);
         setCompletedSessions(mockSessions);
@@ -44,7 +45,7 @@ export function Dashboard({ refreshKey }: DashboardProps) {
           const allLogs = await getAllLogs();
           
           // Get completed sessions
-          const completedSessionsList = getCompletedSessions(allLogs);
+          const completedSessionsList = getCompletedSessions(allLogs, sessions);
           setCompletedSessions(completedSessionsList);
           
           // Get body weight entries
@@ -100,7 +101,7 @@ export function Dashboard({ refreshKey }: DashboardProps) {
     };
 
     loadData();
-  }, [dbReady, getAllLogs, getAllBodyWeights, useMockData, refreshKey]);
+  }, [dbReady, getAllLogs, getAllBodyWeights, useMockData, refreshKey, sessions]);
 
   if (loading) {
     return (

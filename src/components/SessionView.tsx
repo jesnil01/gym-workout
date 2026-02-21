@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SupersetGroup } from './SupersetGroup';
-import { sessions } from '../config/sessions';
+import { useSessionsContext } from '../contexts/SessionsContext';
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
@@ -20,6 +20,7 @@ interface SessionEntry {
 }
 
 export function SessionView({ sessionId, onBack }: SessionViewProps) {
+  const { sessions } = useSessionsContext();
   const [session, setSession] = useState<SessionV2 | null>(null);
   const [sessionEntries, setSessionEntries] = useState<Record<string, SessionEntry>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -32,7 +33,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
     // Reset session entries when session changes
     setSessionEntries({});
     setSaveError(null);
-  }, [sessionId]);
+  }, [sessionId, sessions]);
 
   const handleExerciseUpdate = (exerciseId: string, value: number | null, completed: boolean) => {
     setSessionEntries(prev => ({
