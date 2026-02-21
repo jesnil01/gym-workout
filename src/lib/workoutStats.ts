@@ -139,3 +139,22 @@ export function getCompletedSessions(logs: WorkoutLogEntry[], sessions: SessionV
   
   return completedSessions;
 }
+
+/**
+ * Get usage count for each session template
+ * Returns a map of sessionId -> count of completed sessions
+ */
+export function getSessionUsageCounts(
+  logs: WorkoutLogEntry[], 
+  sessions: SessionV2[]
+): Map<string, number> {
+  const completedSessions = getCompletedSessions(logs, sessions);
+  const countMap = new Map<string, number>();
+  
+  completedSessions.forEach(session => {
+    const current = countMap.get(session.sessionId) || 0;
+    countMap.set(session.sessionId, current + 1);
+  });
+  
+  return countMap;
+}

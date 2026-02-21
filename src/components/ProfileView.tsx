@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -10,11 +11,8 @@ import { downloadJSON } from '../lib/backupUtils';
 import { Download, Trash2 } from 'lucide-react';
 import type { UserProfile, CoachFeedbackEntry } from '../db/indexedDB';
 
-interface ProfileViewProps {
-  onBack: () => void;
-}
-
-export function ProfileView({ onBack }: ProfileViewProps) {
+export function ProfileView() {
+  const navigate = useNavigate();
   const [goal, setGoal] = useState<string>('');
   const [facts, setFacts] = useState<string>('');
   const [feedbackEntries, setFeedbackEntries] = useState<CoachFeedbackEntry[]>([]);
@@ -185,9 +183,9 @@ export function ProfileView({ onBack }: ProfileViewProps) {
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
-              onClick={onBack}
+              onClick={() => navigate('/')}
               className="text-lg"
-              aria-label="Back to sessions"
+              aria-label="Back to home"
             >
               ← Back
             </Button>

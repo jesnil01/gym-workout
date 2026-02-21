@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { SessionList } from './components/SessionList';
+import { SessionTemplates } from './components/SessionTemplates';
+import { SessionDetail } from './components/SessionDetail';
 import { SessionView } from './components/SessionView';
 import { ProfileView } from './components/ProfileView';
 import { useIndexedDB } from './hooks/useIndexedDB';
@@ -9,8 +12,6 @@ import { VersionDisplay } from './components/VersionDisplay';
 import { AnimatedBackground } from './components/AnimatedBackground';
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<'list' | 'session' | 'profile'>('list');
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const { sessions, loading } = useSessionsContext();
   const { saveExerciseData } = useIndexedDB();
 
@@ -36,17 +37,6 @@ function AppContent() {
     }
   }, [loading, sessions, saveExerciseData]);
 
-  const handleSelectSession = (sessionId: string) => {
-    setSelectedSessionId(sessionId);
-    setCurrentView('session');
-  };
-
-  const handleNavigateToProfile = () => setCurrentView('profile');
-  const handleBack = () => {
-    setCurrentView('list');
-    setSelectedSessionId(null);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -60,13 +50,13 @@ function AppContent() {
 
   return (
     <div className="flex-1">
-      {currentView === 'list' ? (
-        <SessionList onSelectSession={handleSelectSession} onNavigateToProfile={handleNavigateToProfile} />
-      ) : currentView === 'profile' ? (
-        <ProfileView onBack={handleBack} />
-      ) : selectedSessionId ? (
-        <SessionView sessionId={selectedSessionId} onBack={handleBack} />
-      ) : null}
+      <Routes>
+        <Route path="/" element={<SessionList />} />
+        <Route path="/templates" element={<SessionTemplates />} />
+        <Route path="/sessions/:sessionKey" element={<SessionDetail />} />
+        <Route path="/session/:sessionId" element={<SessionView />} />
+        <Route path="/profile" element={<ProfileView />} />
+      </Routes>
     </div>
   );
 }

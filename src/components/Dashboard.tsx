@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { formatWeightProgression, getCompletedSessions, type CompletedSession } from '../lib/workoutStats';
@@ -12,7 +13,20 @@ interface DashboardProps {
   refreshKey?: number;
 }
 
+/**
+ * Generate a session key from a completed session
+ * Format: YYYY-M-D-sessionId
+ */
+function getSessionKey(session: CompletedSession): string {
+  const date = new Date(session.timestamp);
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-indexed
+  const day = date.getDate();
+  return `${year}-${month}-${day}-${session.sessionId}`;
+}
+
 export function Dashboard({ refreshKey }: DashboardProps) {
+  const navigate = useNavigate();
   const { sessions } = useSessionsContext();
   const { dbReady, getAllLogs, getAllBodyWeights } = useIndexedDB();
   const [progressions, setProgressions] = useState<Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>>(new Map());
@@ -272,10 +286,12 @@ export function Dashboard({ refreshKey }: DashboardProps) {
               {completedSessions.slice(0, 10).map((session) => {
                 const colors = getSessionColor(session.sessionId);
                 const isCardio = session.type === 'cardio';
+                const sessionKey = getSessionKey(session);
                 return (
                 <div 
                   key={`${session.sessionId}-${session.timestamp}`}
-                  className={`flex items-center justify-between py-2.5 px-3 rounded-md border-r border-t border-b ${colors.border} ${colors.bg}`}
+                  onClick={() => navigate(`/sessions/${sessionKey}`)}
+                  className={`flex items-center justify-between py-2.5 px-3 rounded-md border-r border-t border-b cursor-pointer hover:shadow-md transition-shadow ${colors.border} ${colors.bg}`}
                 >
                   <div className="flex-1">
                     <div className="font-medium text-sm">{session.sessionName}</div>

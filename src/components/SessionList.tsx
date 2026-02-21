@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSessionsContext } from '../contexts/SessionsContext';
 import { Button } from './ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -11,7 +12,7 @@ import { BackupNotification } from './BackupNotification';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useIndexedDB } from '../hooks/useIndexedDB';
-import { User } from 'lucide-react';
+import { User, LayoutTemplate } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -21,12 +22,8 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 
-interface SessionListProps {
-  onSelectSession: (sessionId: string) => void;
-  onNavigateToProfile?: () => void;
-}
-
-export function SessionList({ onSelectSession, onNavigateToProfile }: SessionListProps) {
+export function SessionList() {
+  const navigate = useNavigate();
   const { sessions } = useSessionsContext();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
@@ -46,7 +43,7 @@ export function SessionList({ onSelectSession, onNavigateToProfile }: SessionLis
 
   const handleSelectSession = (sessionId: string) => {
     setDialogOpen(false);
-    onSelectSession(sessionId);
+    navigate(`/session/${sessionId}`);
   };
 
   const handleWeightSubmit = async () => {
@@ -165,17 +162,25 @@ export function SessionList({ onSelectSession, onNavigateToProfile }: SessionLis
         <div className="flex items-center justify-between mt-4 mb-4">
           <Logo fontFamily="'Poppins', sans-serif" />
           <div className="flex items-center gap-2">
-            {onNavigateToProfile && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onNavigateToProfile}
-                className="h-9 w-9"
-                aria-label="Open profile"
-              >
-                <User className="h-5 w-5" />
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/templates')}
+              className="h-9 w-9"
+              aria-label="View session templates"
+              title="View session templates"
+            >
+              <LayoutTemplate className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/profile')}
+              className="h-9 w-9"
+              aria-label="Open profile"
+            >
+              <User className="h-5 w-5" />
+            </Button>
             <ThemeToggle />
           </div>
         </div>

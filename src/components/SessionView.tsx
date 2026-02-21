@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { SupersetGroup } from './SupersetGroup';
 import { useSessionsContext } from '../contexts/SessionsContext';
 import { useIndexedDB } from '../hooks/useIndexedDB';
@@ -7,11 +8,6 @@ import { Alert, AlertDescription } from './ui/alert';
 import { ThemeToggle } from './theme-toggle';
 import type { SessionV2 } from '../schema/sessionSchema';
 
-interface SessionViewProps {
-  sessionId: string;
-  onBack: () => void;
-}
-
 interface SessionEntry {
   exerciseId: string;
   value: number | null;
@@ -19,7 +15,9 @@ interface SessionEntry {
   sessionId: string;
 }
 
-export function SessionView({ sessionId, onBack }: SessionViewProps) {
+export function SessionView() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const { sessions } = useSessionsContext();
   const [session, setSession] = useState<SessionV2 | null>(null);
   const [sessionEntries, setSessionEntries] = useState<Record<string, SessionEntry>>({});
@@ -28,6 +26,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
   const { saveLog } = useIndexedDB();
 
   useEffect(() => {
+    if (!sessionId) return;
     const foundSession = sessions.find(s => s.id === sessionId);
     setSession(foundSession ?? null);
     // Reset session entries when session changes
@@ -36,6 +35,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
   }, [sessionId, sessions]);
 
   const handleExerciseUpdate = (exerciseId: string, value: number | null, completed: boolean) => {
+    if (!sessionId) return;
     setSessionEntries(prev => ({
       ...prev,
       [exerciseId]: {
@@ -73,7 +73,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
       }
 
       // Success - navigate back
-      onBack();
+      navigate('/');
     } catch (err) {
       console.error('Failed to save session:', err);
       setSaveError('Failed to save session. Please try again.');
@@ -81,13 +81,13 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
     }
   };
 
-  if (!session) {
+  if (!session || !sessionId) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-muted-foreground">Session not found</p>
-          <Button onClick={onBack} className="mt-4">
-            Back to Sessions
+          <Button onClick={() => navigate('/')} className="mt-4">
+            Back to Home
           </Button>
         </div>
       </div>
@@ -102,9 +102,9 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
-              onClick={onBack}
+              onClick={() => navigate('/')}
               className="text-lg"
-              aria-label="Back to sessions"
+              aria-label="Back to home"
             >
               ← Back
             </Button>
@@ -123,7 +123,7 @@ export function SessionView({ sessionId, onBack }: SessionViewProps) {
             <SupersetGroup
               key={`${sessionId}-superset-${index}`}
               block={block}
-              sessionId={sessionId}
+              sessionId={sessionId!}
               onExerciseUpdate={handleExerciseUpdate}
               sectionNumber={index + 1}
             />
