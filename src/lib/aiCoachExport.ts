@@ -27,7 +27,7 @@ export interface WorkoutSession {
   };
 }
 
-export interface WorkoutExercise {
+interface WorkoutExercise {
   exerciseId: string;
   exerciseName: string;
   value: number;
@@ -80,14 +80,14 @@ export interface Statistics {
   weeklySummaries: WeeklySummary[];
 }
 
-export interface SessionBreakdownEntry {
+interface SessionBreakdownEntry {
   total: number;
   last7Days: number;
   last30Days: number;
   last90Days: number;
 }
 
-export interface WeeklySummary {
+interface WeeklySummary {
   weekStart: string;
   weekEnd: string;
   gymSessions: number;

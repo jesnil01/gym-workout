@@ -371,7 +371,7 @@ export async function getAllSessions(): Promise<SessionV2[]> {
  * @param {string} id - Session ID
  * @returns {Promise<SessionV2 | null>} - Session or null if not found
  */
-export async function getSession(id: string): Promise<SessionV2 | null> {
+async function getSession(id: string): Promise<SessionV2 | null> {
   const db = await initDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([SESSIONS_STORE], 'readonly');
@@ -392,7 +392,7 @@ export async function getSession(id: string): Promise<SessionV2 | null> {
  * @param {SessionV2} session - Session to save
  * @returns {Promise<void>}
  */
-export async function saveSession(session: SessionV2): Promise<void> {
+async function saveSession(session: SessionV2): Promise<void> {
   SessionSchemaV2.parse(session);
 
   const db = await initDB();

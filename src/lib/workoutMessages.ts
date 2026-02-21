@@ -1,6 +1,6 @@
 import type { CompletedSession } from './workoutStats';
 
-export interface WorkoutStatus {
+interface WorkoutStatus {
   daysSinceLastWorkout: number;
   hasWorkoutToday: boolean;
   hasWorkoutYesterday: boolean;

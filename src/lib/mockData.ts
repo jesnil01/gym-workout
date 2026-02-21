@@ -266,7 +266,7 @@ export function getMockBodyWeights(): BodyWeightEntry[] {
  * Get mock coach feedback entries
  * Returns coach feedback entries spread across the last 14 days
  */
-export function getMockCoachFeedback(): CoachFeedbackEntry[] {
+function getMockCoachFeedback(): CoachFeedbackEntry[] {
   const now = Date.now();
   const oneDay = 24 * 60 * 60 * 1000;
   
@@ -312,7 +312,7 @@ export function getMockCoachFeedback(): CoachFeedbackEntry[] {
  * Get mock user profile
  * Returns a user profile with realistic goals and facts
  */
-export function getMockUserProfile(): UserProfile {
+function getMockUserProfile(): UserProfile {
   return {
     id: 'user',
     goal: "Build muscle mass and increase overall strength. Target: Bench press 80kg, Squat 100kg, and Deadlift 120kg within 6 months. Maintain current body weight around 75kg while improving body composition.",

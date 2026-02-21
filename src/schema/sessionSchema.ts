@@ -11,10 +11,10 @@ import { z } from "zod";
 
 /** ---------- Small reusable schemas ---------- */
 
-export const IdSchema = z.string().min(1);
+const IdSchema = z.string().min(1);
 
 /** How you measure/describe the "work" target for an exercise */
-export const TargetSchema = z.discriminatedUnion("type", [
+const TargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("reps"),
     reps: z.number().int().positive(),
@@ -37,7 +37,7 @@ export const TargetSchema = z.discriminatedUnion("type", [
 ]);
 
 /** How external resistance is applied (optional; many exercises can be bodyweight/time-only) */
-export const LoadSchema = z.discriminatedUnion("type", [
+const LoadSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("weight"),
     unit: z.enum(["kg", "lb"]).default("kg"),
@@ -62,13 +62,13 @@ export const LoadSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const TempoSchema = z
+const TempoSchema = z
   .string()
   .regex(/^\d-\d-\d(-\d)?$/, 'tempo must look like "3-1-1" or "3-1-1-0"')
   .optional();
 
 /** Optional exertion guidance */
-export const EffortSchema = z
+const EffortSchema = z
   .object({
     rir: z.number().int().min(0).max(10).optional(),
     rpe: z.number().min(1).max(10).optional(),
@@ -108,7 +108,7 @@ export const SupersetBlockSchema = z
   })
   .strict();
 
-export const BlockSchema = z.discriminatedUnion("type", [
+const BlockSchema = z.discriminatedUnion("type", [
   SupersetBlockSchema,
 ]);
 
@@ -126,17 +126,17 @@ export const SessionSchemaV2 = z.object({
 export const SessionsSchemaV2 = z.array(SessionSchemaV2);
 
 /** ---------- Types ---------- */
-export type Target = z.infer<typeof TargetSchema>;
-export type Load = z.infer<typeof LoadSchema>;
+type Target = z.infer<typeof TargetSchema>;
+type Load = z.infer<typeof LoadSchema>;
 export type Step = z.infer<typeof StepSchema>;
 export type SupersetBlock = z.infer<typeof SupersetBlockSchema>;
-export type Block = z.infer<typeof BlockSchema>;
+type Block = z.infer<typeof BlockSchema>;
 export type SessionV2 = z.infer<typeof SessionSchemaV2>;
-export type SessionsV2 = z.infer<typeof SessionsSchemaV2>;
+type SessionsV2 = z.infer<typeof SessionsSchemaV2>;
 
 /** ---------- Legacy conversion helpers ---------- */
 
-export interface LegacyExercise {
+interface LegacyExercise {
   id: string;
   name: string;
   sets: number;
@@ -144,18 +144,18 @@ export interface LegacyExercise {
   metricType?: "weight" | "time";
 }
 
-export interface LegacySuperset {
+interface LegacySuperset {
   rest: number;
   exercises: LegacyExercise[];
 }
 
-export interface LegacySession {
+interface LegacySession {
   id: string;
   name: string;
   supersets: LegacySuperset[];
 }
 
-export function legacyExerciseToStep(e: LegacyExercise): Step {
+function legacyExerciseToStep(e: LegacyExercise): Step {
   const metricType = e.metricType ?? "weight";
 
   const target: Target =
@@ -190,7 +190,7 @@ export function legacyExerciseToStep(e: LegacyExercise): Step {
   };
 }
 
-export function legacySupersetToBlock(superset: LegacySuperset): SupersetBlock {
+function legacySupersetToBlock(superset: LegacySuperset): SupersetBlock {
   return {
     type: "superset",
     rest: {

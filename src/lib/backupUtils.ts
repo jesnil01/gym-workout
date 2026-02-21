@@ -7,7 +7,7 @@ const BACKUP_REMINDER_DAYS = 7;
  * Get the timestamp of the last backup from localStorage
  * @returns {number | null} - Timestamp of last backup or null if never backed up
  */
-export function getLastBackupDate(): number | null {
+function getLastBackupDate(): number | null {
   try {
     const stored = localStorage.getItem(LAST_BACKUP_KEY);
     if (stored) {
