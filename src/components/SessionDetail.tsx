@@ -82,14 +82,15 @@ export function SessionDetail() {
   const { sessionKey } = useParams<{ sessionKey: string }>();
   const navigate = useNavigate();
   const { sessions } = useSessionsContext();
-  const { dbReady, getAllLogs, updateLog, deleteLog } = useIndexedDB();
+  const { dbReady, getAllLogs, updateLog, deleteLog, saveLog } = useIndexedDB();
   const [session, setSession] = useState<SessionV2 | null>(null);
   const [sessionLogs, setSessionLogs] = useState<WorkoutLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [editValues, setEditValues] = useState<Record<string, { value: number; attempted: boolean; completed: boolean; id: number }>>({});
+  const [editValues, setEditValues] = useState<Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [parsedDate, setParsedDate] = useState<{ year: number; month: number; day: number; sessionId: string } | null>(null);
   
   const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
@@ -106,6 +107,8 @@ export function SessionDetail() {
       setLoading(false);
       return;
     }
+
+    setParsedDate(parsed);
 
     // Find the session config
     const foundSession = sessions.find(s => s.id === parsed.sessionId);
@@ -147,8 +150,11 @@ export function SessionDetail() {
         // For regular sessions, we'll have multiple exercise logs
         setSessionLogs(filteredLogs);
         
-        // Initialize edit values (only for non-cardio exercises)
-        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id: number }> = {};
+        // Initialize edit values for ALL exercises in the session (not just ones with logs)
+        // This allows editing non-attempted exercises
+        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }> = {};
+        
+        // First, add all existing logs
         filteredLogs.forEach(log => {
           if (log.type !== 'cardio') {
             editMap[log.exerciseId] = {
@@ -159,6 +165,26 @@ export function SessionDetail() {
             };
           }
         });
+        
+        // Then, add all exercises from the session that don't have logs yet
+        if (foundSession) {
+          foundSession.blocks.forEach(block => {
+            if (block.type === 'superset') {
+              block.exercises.forEach(exercise => {
+                if (!editMap[exercise.id]) {
+                  // Create a placeholder entry for non-attempted exercises
+                  editMap[exercise.id] = {
+                    value: 0,
+                    attempted: false,
+                    completed: false
+                    // No id - this will be a new log entry
+                  };
+                }
+              });
+            }
+          });
+        }
+        
         setEditValues(editMap);
       } catch (err) {
         console.error('Failed to load session details:', err);
@@ -179,7 +205,7 @@ export function SessionDetail() {
     setIsEditMode(false);
     // Reload data to reset edit values
     const parsed = parseSessionKey(sessionKey!);
-    if (parsed && dbReady) {
+    if (parsed && dbReady && session) {
       getAllLogs().then(allLogs => {
         const filteredLogs = allLogs.filter(log => 
           log.sessionId === parsed.sessionId &&
@@ -187,7 +213,11 @@ export function SessionDetail() {
           isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
         );
         setSessionLogs(filteredLogs);
-        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id: number }> = {};
+        
+        // Initialize edit values for ALL exercises
+        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }> = {};
+        
+        // Add existing logs
         filteredLogs.forEach(log => {
           if (log.type !== 'cardio') {
             editMap[log.exerciseId] = {
@@ -198,6 +228,22 @@ export function SessionDetail() {
             };
           }
         });
+        
+        // Add exercises without logs
+        session.blocks.forEach(block => {
+          if (block.type === 'superset') {
+            block.exercises.forEach(exercise => {
+              if (!editMap[exercise.id]) {
+                editMap[exercise.id] = {
+                  value: 0,
+                  attempted: false,
+                  completed: false
+                };
+              }
+            });
+          }
+        });
+        
         setEditValues(editMap);
       });
     }
@@ -208,26 +254,54 @@ export function SessionDetail() {
     setError(null);
     
     try {
-      // Update all edited logs
+      if (!parsedDate || !session) {
+        setError('Session data not available');
+        setIsSaving(false);
+        return;
+      }
+      
+      // Create timestamp from parsed date (use noon to avoid timezone issues)
+      const sessionTimestamp = new Date(parsedDate.year, parsedDate.month, parsedDate.day, 12, 0, 0).getTime();
+      
+      // Update existing logs and create new ones
       for (const [exerciseId, editValue] of Object.entries(editValues)) {
-        await updateLog(editValue.id, {
-          value: editValue.value,
-          attempted: editValue.attempted,
-          completed: editValue.completed
-        });
+        // Only save if attempted is true (we don't want to create logs for non-attempted exercises)
+        if (editValue.attempted) {
+          if (editValue.id !== undefined) {
+            // Update existing log
+            await updateLog(editValue.id, {
+              value: editValue.value,
+              attempted: editValue.attempted,
+              completed: editValue.completed
+            });
+          } else {
+            // Create new log entry
+            const newLogId = await saveLog({
+              exerciseId,
+              value: editValue.value,
+              attempted: editValue.attempted,
+              completed: editValue.completed,
+              sessionId: parsedDate.sessionId
+            });
+            // Update the timestamp to match the session date
+            await updateLog(newLogId, {
+              timestamp: sessionTimestamp
+            });
+          }
+        } else if (editValue.id !== undefined) {
+          // If attempted is false but there's an existing log, delete it
+          await deleteLog(editValue.id);
+        }
       }
       
       // Reload data
-      const parsed = parseSessionKey(sessionKey!);
-      if (parsed) {
-        const allLogs = await getAllLogs();
-        const filteredLogs = allLogs.filter(log => 
-          log.sessionId === parsed.sessionId &&
-          (log.attempted ?? true) === true &&
-          isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
-        );
-        setSessionLogs(filteredLogs);
-      }
+      const allLogs = await getAllLogs();
+      const filteredLogs = allLogs.filter(log => 
+        log.sessionId === parsedDate.sessionId &&
+        (log.attempted ?? true) === true &&
+        isSameDate(log.timestamp, parsedDate.year, parsedDate.month, parsedDate.day)
+      );
+      setSessionLogs(filteredLogs);
       
       setIsEditMode(false);
     } catch (err) {
@@ -476,11 +550,11 @@ export function SessionDetail() {
                                     ) : null}
                                   </div>
                                 )}
-                                {isEditMode && log && (
+                                {isEditMode && editValue && editValue.id !== undefined && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDeleteLog(log.id, exercise.id)}
+                                    onClick={() => handleDeleteLog(editValue.id!, exercise.id)}
                                     className="text-destructive hover:text-destructive"
                                   >
                                     <X className="h-4 w-4" />
