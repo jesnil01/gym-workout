@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, exportAICoachData, saveCoachFeedback, getAllCoachFeedback, deleteCoachFeedback, updateWorkoutLog, deleteWorkoutLog, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile, type CoachFeedbackEntry } from '../db/indexedDB';
+import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, exportAICoachData, saveCoachFeedback, getAllCoachFeedback, deleteCoachFeedback, updateWorkoutLog, deleteWorkoutLog, saveSessionEntries, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile, type CoachFeedbackEntry } from '../db/indexedDB';
 import type { AICoachExportData } from '../lib/aiCoachExport';
 
 export function useIndexedDB() {
@@ -199,6 +199,15 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const saveSessionEntriesData = useCallback(async (entries: Array<Omit<WorkoutLogEntry, 'id' | 'timestamp'>>): Promise<void> => {
+    try {
+      await saveSessionEntries(entries);
+    } catch (err) {
+      console.error('Failed to save session entries:', err);
+      throw err;
+    }
+  }, []);
+
   return {
     dbReady,
     error,
@@ -221,6 +230,7 @@ export function useIndexedDB() {
     getAllCoachFeedback: getAllCoachFeedbackData,
     deleteCoachFeedback: deleteCoachFeedbackData,
     updateLog,
-    deleteLog
+    deleteLog,
+    saveSessionEntries: saveSessionEntriesData
   };
 }

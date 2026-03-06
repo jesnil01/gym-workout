@@ -16,6 +16,14 @@ interface SessionEntry {
   sessionId: string;
 }
 
+/**
+ * Get date key for localStorage (YYYY-M-D format)
+ */
+function getDateKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
 export function SessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -24,16 +32,50 @@ export function SessionView() {
   const [sessionEntries, setSessionEntries] = useState<Record<string, SessionEntry>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { saveLog } = useIndexedDB();
+  const [restoredFromStorage, setRestoredFromStorage] = useState(false);
+  const { saveSessionEntries } = useIndexedDB();
 
   useEffect(() => {
     if (!sessionId) return;
     const foundSession = sessions.find(s => s.id === sessionId);
     setSession(foundSession ?? null);
-    // Reset session entries when session changes
-    setSessionEntries({});
     setSaveError(null);
+    
+    // Try to restore from localStorage (only if data is from today)
+    const storageKey = `gym-workout-session-${sessionId}-${getDateKey()}`;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setSessionEntries(parsed);
+        setRestoredFromStorage(true);
+      } else {
+        // Reset session entries when session changes and no saved data
+        setSessionEntries({});
+        setRestoredFromStorage(false);
+      }
+    } catch (err) {
+      console.warn('Failed to restore session state:', err);
+      setSessionEntries({});
+      setRestoredFromStorage(false);
+    }
   }, [sessionId, sessions]);
+
+  // Save session entries to localStorage on every update (debounced)
+  useEffect(() => {
+    if (!sessionId || Object.keys(sessionEntries).length === 0) return;
+    
+    const timeoutId = setTimeout(() => {
+      const storageKey = `gym-workout-session-${sessionId}-${getDateKey()}`;
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(sessionEntries));
+      } catch (err) {
+        console.warn('Failed to save session state to localStorage:', err);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [sessionEntries, sessionId]);
 
   const handleExerciseUpdate = (exerciseId: string, value: number | null, attempted: boolean, completed: boolean) => {
     if (!sessionId) return;
@@ -64,15 +106,23 @@ export function SessionView() {
     setSaveError(null);
 
     try {
-      // Save all entries to IndexedDB
-      for (const entry of validEntries) {
-        await saveLog({
+      // Save all entries atomically using the new function
+      await saveSessionEntries(
+        validEntries.map(entry => ({
           exerciseId: entry.exerciseId,
           value: entry.value!,
           attempted: entry.attempted,
           completed: entry.completed,
           sessionId: entry.sessionId
-        });
+        }))
+      );
+
+      // Clear localStorage after successful save
+      const storageKey = `gym-workout-session-${sessionId}-${getDateKey()}`;
+      try {
+        localStorage.removeItem(storageKey);
+      } catch (err) {
+        console.warn('Failed to clear localStorage:', err);
       }
 
       // Success - navigate back
@@ -120,6 +170,13 @@ export function SessionView() {
 
       {/* Complete Session Button - Fixed at bottom */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg z-20 p-4">
+        {restoredFromStorage && (
+          <Alert className="mb-3">
+            <AlertDescription>
+              Your previous session data has been restored. You can continue where you left off.
+            </AlertDescription>
+          </Alert>
+        )}
         {saveError && (
           <Alert variant="destructive" className="mb-3">
             <AlertDescription>{saveError}</AlertDescription>

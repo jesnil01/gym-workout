@@ -39,7 +39,7 @@ export function SessionList() {
   const [isSavingCardio, setIsSavingCardio] = useState(false);
   const [cardioError, setCardioError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const { dbReady, saveBodyWeight, saveLog } = useIndexedDB();
+  const { dbReady, saveBodyWeight, saveSessionEntries } = useIndexedDB();
 
   const handleSelectSession = (sessionId: string) => {
     setDialogOpen(false);
@@ -108,15 +108,16 @@ export function SessionList() {
       setIsSavingCardio(true);
 
       try {
-        await saveLog({
+        await saveSessionEntries([{
           exerciseId: 'running',
           sessionId: 'running',
           value: totalSeconds,
+          attempted: true,
           completed: true,
           type: 'cardio',
           time: totalSeconds,
           pace: pace
-        });
+        }]);
 
         // Success - reset form and close modal
         setRunningHours('');
@@ -135,14 +136,15 @@ export function SessionList() {
       setIsSavingCardio(true);
 
       try {
-        await saveLog({
+        await saveSessionEntries([{
           exerciseId: 'floorball',
           sessionId: 'floorball',
           value: 3600,
+          attempted: true,
           completed: true,
           type: 'cardio',
           time: 3600
-        });
+        }]);
 
         // Success - close modal
         setCardioDialogOpen(false);

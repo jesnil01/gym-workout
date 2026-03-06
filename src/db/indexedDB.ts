@@ -226,6 +226,121 @@ export async function saveWorkoutLog(entry: Omit<WorkoutLogEntry, 'id' | 'timest
 }
 
 /**
+ * Save or update a workout log entry (upsert)
+ * Checks for existing entry by exerciseId + sessionId + date (same day)
+ * If exists: updates existing entry (preserves original timestamp)
+ * If not exists: creates new entry
+ * @param {Object} entry - Workout log entry
+ * @param {IDBObjectStore} store - IndexedDB object store (must be from active transaction)
+ * @returns {Promise<number>} - Returns the entry ID (existing or new)
+ */
+async function saveOrUpdateWorkoutLogInTransaction(
+  entry: Omit<WorkoutLogEntry, 'id' | 'timestamp'>,
+  store: IDBObjectStore
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    // Get today's date boundaries
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStart = today.getTime();
+    const todayEnd = todayStart + (24 * 60 * 60 * 1000);
+
+    // Query existing entries for this exercise today
+    const index = store.index('exerciseId');
+    const request = index.openCursor(IDBKeyRange.only(entry.exerciseId));
+
+    let existingEntry: WorkoutLogEntry | null = null;
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+      if (cursor) {
+        const log = cursor.value as WorkoutLogEntry;
+        // Check if this entry matches sessionId and is from today
+        if (
+          log.sessionId === entry.sessionId &&
+          log.timestamp >= todayStart &&
+          log.timestamp < todayEnd
+        ) {
+          existingEntry = log;
+          // Found match - update it and stop searching
+          if (existingEntry.id !== undefined) {
+            const updatedEntry: WorkoutLogEntry = {
+              ...existingEntry,
+              ...entry,
+              timestamp: existingEntry.timestamp // Preserve original timestamp
+            };
+            const updateRequest = store.put(updatedEntry);
+            updateRequest.onsuccess = () => resolve(existingEntry!.id!);
+            updateRequest.onerror = () => reject(new Error('Failed to update workout log'));
+          }
+          return; // Stop cursor iteration
+        }
+        cursor.continue();
+      } else {
+        // Cursor exhausted - no match found, create new entry
+        if (!existingEntry) {
+          const logEntry: WorkoutLogEntry = {
+            ...entry,
+            timestamp: Date.now()
+          };
+          const addRequest = store.add(logEntry);
+          addRequest.onsuccess = () => resolve(addRequest.result as number);
+          addRequest.onerror = () => reject(new Error('Failed to save workout log'));
+        }
+      }
+    };
+
+    request.onerror = () => reject(new Error('Failed to query workout logs'));
+  });
+}
+
+/**
+ * Save multiple workout log entries atomically in a single transaction
+ * @param {Array} entries - Array of workout log entries to save
+ * @returns {Promise<void>} - Resolves when all entries are saved, rejects if any fail
+ */
+export async function saveSessionEntries(entries: Array<Omit<WorkoutLogEntry, 'id' | 'timestamp'>>): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readwrite');
+    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+    
+    let completed = 0;
+    let hasError = false;
+
+    // Save all entries using the same transaction
+    entries.forEach((entry) => {
+      saveOrUpdateWorkoutLogInTransaction(entry, store)
+        .then(() => {
+          completed++;
+          if (completed === entries.length && !hasError) {
+            resolve();
+          }
+        })
+        .catch((err) => {
+          if (!hasError) {
+            hasError = true;
+            reject(err);
+          }
+        });
+    });
+
+    // If no entries, resolve immediately
+    if (entries.length === 0) {
+      resolve();
+    }
+
+    // Transaction error handler
+    transaction.onerror = () => {
+      if (!hasError) {
+        hasError = true;
+        reject(new Error('Transaction failed'));
+      }
+    };
+  });
+}
+
+/**
  * Get the most recent workout log entry for an exercise
  * @param {string} exerciseId - Exercise ID
  * @returns {Promise<Object|null>} - Most recent entry or null if none exists
