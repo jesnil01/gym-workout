@@ -351,18 +351,17 @@ export async function getLastExerciseEntry(exerciseId: string): Promise<WorkoutL
     const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readonly');
     const store = transaction.objectStore(WORKOUT_LOGS_STORE);
     const index = store.index('exerciseId');
-    const request = index.openCursor(IDBKeyRange.only(exerciseId), 'prev');
+    const request = index.getAll(exerciseId);
 
-    let lastEntry = null;
-
-    request.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
-      if (cursor) {
-        lastEntry = cursor.value as WorkoutLogEntry;
-        resolve(lastEntry);
-      } else {
+    request.onsuccess = () => {
+      const allEntries = request.result as WorkoutLogEntry[];
+      if (allEntries.length === 0) {
         resolve(null);
+        return;
       }
+      // Sort by timestamp descending (most recent first) and return the first one
+      const sortedEntries = allEntries.sort((a, b) => b.timestamp - a.timestamp);
+      resolve(sortedEntries[0]);
     };
 
     request.onerror = () => reject(new Error('Failed to get last exercise entry'));
@@ -381,18 +380,15 @@ export async function getLastNExerciseEntries(exerciseId: string, limit: number)
     const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readonly');
     const store = transaction.objectStore(WORKOUT_LOGS_STORE);
     const index = store.index('exerciseId');
-    const request = index.openCursor(IDBKeyRange.only(exerciseId), 'prev');
+    const request = index.getAll(exerciseId);
 
-    const entries: WorkoutLogEntry[] = [];
-
-    request.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
-      if (cursor && entries.length < limit) {
-        entries.push(cursor.value as WorkoutLogEntry);
-        cursor.continue();
-      } else {
-        resolve(entries);
-      }
+    request.onsuccess = () => {
+      const allEntries = request.result as WorkoutLogEntry[];
+      // Sort by timestamp descending (most recent first) and take first N
+      const sortedEntries = allEntries
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, limit);
+      resolve(sortedEntries);
     };
 
     request.onerror = () => reject(new Error('Failed to get last N exercise entries'));
