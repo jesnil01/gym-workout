@@ -9,7 +9,7 @@ import type { Step } from '../schema/sessionSchema';
 interface ExerciseCardProps {
   step: Step;
   sessionId: string; // Passed by parent for session context
-  onExerciseUpdate: (exerciseId: string, value: number | null, completed: boolean) => void;
+  onExerciseUpdate: (exerciseId: string, value: number | null, attempted: boolean, completed: boolean) => void;
 }
 
 function formatStepDescription(step: Step): string {
@@ -32,8 +32,9 @@ export function ExerciseCard({ step, sessionId: _sessionId, onExerciseUpdate }: 
   const { getLastNEntries } = useIndexedDB();
   const isTimeBased = step.target.type === 'time';
   const [value, setValue] = useState('');
+  const [attempted, setAttempted] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [lastEntries, setLastEntries] = useState<Array<{ value: number; completed: boolean; timestamp: number }>>([]);
+  const [lastEntries, setLastEntries] = useState<Array<{ value: number; attempted: boolean; completed: boolean; timestamp: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export function ExerciseCard({ step, sessionId: _sessionId, onExerciseUpdate }: 
         if (entries.length > 0) {
           setLastEntries(entries.map(e => ({
             value: e.value,
+            attempted: e.attempted ?? true, // Default to true for backward compatibility
             completed: e.completed,
             timestamp: e.timestamp
           })));
@@ -69,18 +71,28 @@ export function ExerciseCard({ step, sessionId: _sessionId, onExerciseUpdate }: 
       ? (newValue && !isNaN(parseInt(newValue)) && parseInt(newValue) > 0 ? parseInt(newValue) : null)
       : (newValue && !isNaN(parseFloat(newValue)) && parseFloat(newValue) > 0 ? parseFloat(newValue) : null);
 
-    onExerciseUpdate(step.id, parsedValue, completed);
+    // Don't auto-set attempted - user must check the checkbox manually
+    onExerciseUpdate(step.id, parsedValue, attempted, completed);
+  };
+
+  const handleAttemptedChange = (checked: boolean) => {
+    setAttempted(checked);
+
+    const parsedValue = isTimeBased
+      ? (value && !isNaN(parseInt(value)) && parseInt(value) > 0 ? parseInt(value) : null)
+      : (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0 ? parseFloat(value) : null);
+
+    onExerciseUpdate(step.id, parsedValue, checked, completed);
   };
 
   const handleCompletedChange = (checked: boolean) => {
     setCompleted(checked);
 
-    // Update parent state (not DB)
     const parsedValue = isTimeBased
       ? (value && !isNaN(parseInt(value)) && parseInt(value) > 0 ? parseInt(value) : null)
       : (value && !isNaN(parseFloat(value)) && parseFloat(value) > 0 ? parseFloat(value) : null);
 
-    onExerciseUpdate(step.id, parsedValue, checked);
+    onExerciseUpdate(step.id, parsedValue, attempted, checked);
   };
 
   const formatValue = (val: number): string => {
@@ -98,8 +110,12 @@ export function ExerciseCard({ step, sessionId: _sessionId, onExerciseUpdate }: 
     );
   }
 
+  // Determine card styling based on attempted/completed state
+  const cardOpacity = attempted && !completed ? 'opacity-75' : '';
+  const cardBorder = completed ? 'border-green-500' : attempted ? 'border-yellow-500' : '';
+
   return (
-    <Card className="mb-3">
+    <Card className={`mb-3 ${cardOpacity} ${cardBorder} ${cardBorder ? 'border-2' : ''}`}>
       <CardHeader>
         <CardTitle className="text-lg">{step.name}</CardTitle>
         <CardDescription>
@@ -109,7 +125,7 @@ export function ExerciseCard({ step, sessionId: _sessionId, onExerciseUpdate }: 
           <CardDescription className="text-xs mt-1 space-y-1">
             {lastEntries.map((entry, index) => (
               <div key={index} className="flex items-center gap-1.5">
-                <span>{entry.completed ? '✅' : '❌'}</span>
+                <span>{entry.completed ? '✅' : entry.attempted ? '⚠️' : '❌'}</span>
                 <span>{formatValue(entry.value)}</span>
                 <span className="text-muted-foreground">
                   {new Date(entry.timestamp).toLocaleDateString()}
@@ -137,18 +153,33 @@ export function ExerciseCard({ step, sessionId: _sessionId, onExerciseUpdate }: 
           />
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id={`completed-${step.id}`}
-            checked={completed}
-            onCheckedChange={handleCompletedChange}
-          />
-          <Label
-            htmlFor={`completed-${step.id}`}
-            className="text-sm font-medium cursor-pointer"
-          >
-            Completed successfully
-          </Label>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id={`attempted-${step.id}`}
+              checked={attempted}
+              onCheckedChange={handleAttemptedChange}
+            />
+            <Label
+              htmlFor={`attempted-${step.id}`}
+              className="text-sm font-medium cursor-pointer"
+            >
+              Attempted
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id={`completed-${step.id}`}
+              checked={completed}
+              onCheckedChange={handleCompletedChange}
+            />
+            <Label
+              htmlFor={`completed-${step.id}`}
+              className="text-sm font-medium cursor-pointer"
+            >
+              Completed all reps
+            </Label>
+          </div>
         </div>
       </CardContent>
     </Card>

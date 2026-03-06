@@ -18,8 +18,10 @@ export function getWorkoutCountInDays(logs: WorkoutLogEntry[], days: number): nu
   const now = Date.now();
   const daysAgo = now - (days * 24 * 60 * 60 * 1000);
   
-  // Filter logs within date range
-  const recentLogs = logs.filter(log => log.timestamp >= daysAgo);
+  // Filter logs within date range, exclude non-attempted exercises
+  const recentLogs = logs.filter(log => 
+    log.timestamp >= daysAgo && (log.attempted ?? true) === true
+  );
   
   // Group by sessionId + date (day)
   const uniqueWorkouts = new Set<string>();
@@ -89,8 +91,8 @@ export function getCompletedSessions(logs: WorkoutLogEntry[], sessions: SessionV
   
   // Group logs by sessionId + date
   logs.forEach(log => {
-    // Only include completed exercises
-    if (!log.completed) {
+    // Only include attempted and completed exercises
+    if (!(log.attempted ?? true) || !log.completed) {
       return;
     }
     

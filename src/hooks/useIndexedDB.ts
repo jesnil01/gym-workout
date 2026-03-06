@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, exportAICoachData, saveCoachFeedback, getAllCoachFeedback, deleteCoachFeedback, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile, type CoachFeedbackEntry } from '../db/indexedDB';
+import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, exportAICoachData, saveCoachFeedback, getAllCoachFeedback, deleteCoachFeedback, updateWorkoutLog, deleteWorkoutLog, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile, type CoachFeedbackEntry } from '../db/indexedDB';
 import type { AICoachExportData } from '../lib/aiCoachExport';
 
 export function useIndexedDB() {
@@ -181,6 +181,24 @@ export function useIndexedDB() {
     }
   }, []);
 
+  const updateLog = useCallback(async (id: number, updates: Partial<WorkoutLogEntry>): Promise<void> => {
+    try {
+      await updateWorkoutLog(id, updates);
+    } catch (err) {
+      console.error('Failed to update workout log:', err);
+      throw err;
+    }
+  }, []);
+
+  const deleteLog = useCallback(async (id: number): Promise<void> => {
+    try {
+      await deleteWorkoutLog(id);
+    } catch (err) {
+      console.error('Failed to delete workout log:', err);
+      throw err;
+    }
+  }, []);
+
   return {
     dbReady,
     error,
@@ -201,6 +219,8 @@ export function useIndexedDB() {
     exportAICoachData: exportAICoachDataFunc,
     saveCoachFeedback: saveCoachFeedbackData,
     getAllCoachFeedback: getAllCoachFeedbackData,
-    deleteCoachFeedback: deleteCoachFeedbackData
+    deleteCoachFeedback: deleteCoachFeedbackData,
+    updateLog,
+    deleteLog
   };
 }

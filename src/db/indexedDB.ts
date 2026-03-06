@@ -3,7 +3,7 @@ import { SessionSchemaV2 } from '../schema/sessionSchema';
 import { sessions as defaultSessions } from '../config/sessions';
 
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
@@ -23,7 +23,8 @@ export interface WorkoutLogEntry {
   id?: number;
   exerciseId: string;
   value: number;
-  completed: boolean;
+  attempted: boolean; // indicates exercise was attempted
+  completed: boolean; // indicates if all reps were achieved
   timestamp: number;
   sessionId: string;
   type?: 'cardio';
@@ -152,6 +153,29 @@ export function initDB(): Promise<IDBDatabase> {
           }
         };
       }
+
+      // Migration from version 7 to 8: add attempted field to all existing entries
+      if (oldVersion < 8 && db.objectStoreNames.contains(WORKOUT_LOGS_STORE)) {
+        const transaction = (event.target as IDBOpenDBRequest).transaction!;
+        const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+        const request = store.openCursor();
+
+        request.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+          if (cursor) {
+            const entry = cursor.value;
+            // Add attempted: true to all existing entries (since they exist, they were attempted)
+            if (!('attempted' in entry)) {
+              const updatedEntry = {
+                ...entry,
+                attempted: true
+              };
+              cursor.update(updatedEntry);
+            }
+            cursor.continue();
+          }
+        };
+      }
     };
   });
 }
@@ -178,6 +202,7 @@ export async function saveExercise(exercise: Exercise): Promise<void> {
  * @param {Object} entry - Workout log entry
  * @param {string} entry.exerciseId - Exercise ID
  * @param {number} entry.value - Value (weight in kg or time in seconds)
+ * @param {boolean} entry.attempted - Whether exercise was attempted
  * @param {boolean} entry.completed - Whether exercise was completed successfully
  * @param {string} entry.sessionId - Session ID
  * @returns {Promise<number>} - Returns the auto-generated ID
@@ -195,7 +220,7 @@ export async function saveWorkoutLog(entry: Omit<WorkoutLogEntry, 'id' | 'timest
 
     const request = store.add(logEntry);
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve(request.result as number);
     request.onerror = () => reject(new Error('Failed to save workout log'));
   });
 }
@@ -323,6 +348,57 @@ export async function getAllWorkoutLogs(): Promise<WorkoutLogEntry[]> {
     };
 
     request.onerror = () => reject(new Error('Failed to get all workout logs'));
+  });
+}
+
+/**
+ * Update a workout log entry
+ * @param {number} id - ID of the log entry to update
+ * @param {Partial<WorkoutLogEntry>} updates - Partial entry with fields to update
+ * @returns {Promise<void>}
+ */
+export async function updateWorkoutLog(id: number, updates: Partial<WorkoutLogEntry>): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readwrite');
+    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const existingEntry = getRequest.result as WorkoutLogEntry | undefined;
+      if (!existingEntry) {
+        reject(new Error('Workout log entry not found'));
+        return;
+      }
+
+      const updatedEntry = {
+        ...existingEntry,
+        ...updates
+      };
+
+      const putRequest = store.put(updatedEntry);
+      putRequest.onsuccess = () => resolve();
+      putRequest.onerror = () => reject(new Error('Failed to update workout log'));
+    };
+
+    getRequest.onerror = () => reject(new Error('Failed to get workout log entry'));
+  });
+}
+
+/**
+ * Delete a workout log entry
+ * @param {number} id - ID of the log entry to delete
+ * @returns {Promise<void>}
+ */
+export async function deleteWorkoutLog(id: number): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readwrite');
+    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+    const request = store.delete(id);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error('Failed to delete workout log'));
   });
 }
 
@@ -500,6 +576,7 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
           
           const logEntry = {
             ...log,
+            attempted: 'attempted' in log ? log.attempted : true, // Default to true for old backups
             timestamp: log.timestamp || Date.now() // Use original timestamp or current time if missing
           };
 

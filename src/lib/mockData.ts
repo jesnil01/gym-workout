@@ -28,6 +28,7 @@ export function getMockWorkoutLogs(): WorkoutLogEntry[] {
       mockLogs.push({
         exerciseId: exercise.id,
         value: exercise.value,
+        attempted: true,
         completed: true,
         timestamp: timestamp + Math.random() * 10000, // Spread within the day
         sessionId

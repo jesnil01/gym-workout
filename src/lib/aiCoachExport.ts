@@ -169,6 +169,9 @@ export function groupWorkoutSessions(
   }>();
 
   logs.forEach(log => {
+    // Exclude non-attempted exercises from statistics
+    if (!(log.attempted ?? true)) return;
+
     const date = new Date(log.timestamp);
     const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
 
@@ -236,6 +239,8 @@ export function createExerciseProgressions(
 
   logs.forEach(log => {
     if (log.type === 'cardio') return;
+    // Exclude non-attempted exercises from progressions
+    if (!(log.attempted ?? true)) return;
 
     if (!progressions[log.exerciseId]) {
       progressions[log.exerciseId] = [];

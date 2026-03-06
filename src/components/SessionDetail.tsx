@@ -4,9 +4,12 @@ import { useIndexedDB } from '../hooks/useIndexedDB';
 import { useSessionsContext } from '../contexts/SessionsContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Checkbox } from './ui/checkbox';
+import { Label } from './ui/label';
 import { ThemeToggle } from './theme-toggle';
 import { formatTime, formatPace } from '../lib/utils';
-import { ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, AlertCircle, Edit, Save, X } from 'lucide-react';
 import type { WorkoutLogEntry } from '../db/indexedDB';
 import type { SessionV2 } from '../schema/sessionSchema';
 
@@ -79,11 +82,14 @@ export function SessionDetail() {
   const { sessionKey } = useParams<{ sessionKey: string }>();
   const navigate = useNavigate();
   const { sessions } = useSessionsContext();
-  const { dbReady, getAllLogs } = useIndexedDB();
+  const { dbReady, getAllLogs, updateLog, deleteLog } = useIndexedDB();
   const [session, setSession] = useState<SessionV2 | null>(null);
   const [sessionLogs, setSessionLogs] = useState<WorkoutLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editValues, setEditValues] = useState<Record<string, { value: number; attempted: boolean; completed: boolean; id: number }>>({});
+  const [isSaving, setIsSaving] = useState(false);
   
   const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
@@ -130,15 +136,30 @@ export function SessionDetail() {
         }
 
         // Filter logs for this specific session and date
+        // Show all attempted exercises (not just completed ones)
         const filteredLogs = allLogs.filter(log => 
           log.sessionId === parsed.sessionId &&
-          log.completed === true &&
+          (log.attempted ?? true) === true && // Default to true for backward compatibility
           isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
         );
 
         // For cardio sessions, we might have only one log entry
         // For regular sessions, we'll have multiple exercise logs
         setSessionLogs(filteredLogs);
+        
+        // Initialize edit values (only for non-cardio exercises)
+        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id: number }> = {};
+        filteredLogs.forEach(log => {
+          if (log.type !== 'cardio') {
+            editMap[log.exerciseId] = {
+              value: log.value,
+              attempted: log.attempted ?? true,
+              completed: log.completed,
+              id: log.id!
+            };
+          }
+        });
+        setEditValues(editMap);
       } catch (err) {
         console.error('Failed to load session details:', err);
         setError('Failed to load session details');
@@ -149,6 +170,113 @@ export function SessionDetail() {
 
     loadData();
   }, [sessionKey, sessions, dbReady, getAllLogs, useMockData]);
+
+  const handleEditClick = () => {
+    setIsEditMode(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    // Reload data to reset edit values
+    const parsed = parseSessionKey(sessionKey!);
+    if (parsed && dbReady) {
+      getAllLogs().then(allLogs => {
+        const filteredLogs = allLogs.filter(log => 
+          log.sessionId === parsed.sessionId &&
+          (log.attempted ?? true) === true &&
+          isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+        );
+        setSessionLogs(filteredLogs);
+        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id: number }> = {};
+        filteredLogs.forEach(log => {
+          if (log.type !== 'cardio') {
+            editMap[log.exerciseId] = {
+              value: log.value,
+              attempted: log.attempted ?? true,
+              completed: log.completed,
+              id: log.id!
+            };
+          }
+        });
+        setEditValues(editMap);
+      });
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    setIsSaving(true);
+    setError(null);
+    
+    try {
+      // Update all edited logs
+      for (const [exerciseId, editValue] of Object.entries(editValues)) {
+        await updateLog(editValue.id, {
+          value: editValue.value,
+          attempted: editValue.attempted,
+          completed: editValue.completed
+        });
+      }
+      
+      // Reload data
+      const parsed = parseSessionKey(sessionKey!);
+      if (parsed) {
+        const allLogs = await getAllLogs();
+        const filteredLogs = allLogs.filter(log => 
+          log.sessionId === parsed.sessionId &&
+          (log.attempted ?? true) === true &&
+          isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+        );
+        setSessionLogs(filteredLogs);
+      }
+      
+      setIsEditMode(false);
+    } catch (err) {
+      console.error('Failed to save edits:', err);
+      setError('Failed to save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteLog = async (logId: number, exerciseId: string) => {
+    try {
+      await deleteLog(logId);
+      // Remove from edit values
+      const newEditValues = { ...editValues };
+      delete newEditValues[exerciseId];
+      setEditValues(newEditValues);
+      
+      // Reload data
+      const parsed = parseSessionKey(sessionKey!);
+      if (parsed) {
+        const allLogs = await getAllLogs();
+        const filteredLogs = allLogs.filter(log => 
+          log.sessionId === parsed.sessionId &&
+          (log.attempted ?? true) === true &&
+          isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+        );
+        setSessionLogs(filteredLogs);
+      }
+    } catch (err) {
+      console.error('Failed to delete log:', err);
+      setError('Failed to delete exercise log. Please try again.');
+    }
+  };
+
+  const updateEditValue = (exerciseId: string, field: 'value' | 'attempted' | 'completed', newValue: number | boolean) => {
+    setEditValues(prev => {
+      const current = prev[exerciseId];
+      if (!current) return prev;
+      
+      return {
+        ...prev,
+        [exerciseId]: {
+          ...current,
+          [field]: newValue
+        }
+      };
+    });
+  };
 
   if (loading) {
     return (
@@ -182,12 +310,14 @@ export function SessionDetail() {
     : Date.now();
 
   // Create a map of exerciseId to logged value
-  const exerciseLogMap = new Map<string, { value: number; completed: boolean }>();
+  const exerciseLogMap = new Map<string, { value: number; attempted: boolean; completed: boolean; id: number }>();
   sessionLogs.forEach(log => {
     if (!isCardio || log.type !== 'cardio') {
       exerciseLogMap.set(log.exerciseId, {
         value: log.value,
-        completed: log.completed
+        attempted: log.attempted ?? true,
+        completed: log.completed,
+        id: log.id!
       });
     }
   });
@@ -221,10 +351,43 @@ export function SessionDetail() {
           {/* Session Header */}
           <Card className={`mb-4 ${colors.border} ${colors.bg}`}>
             <CardHeader>
-              <CardTitle className="text-xl">{session.name}</CardTitle>
-              <CardDescription>{formatSessionDate(sessionDate)}</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl">{session.name}</CardTitle>
+                  <CardDescription>{formatSessionDate(sessionDate)}</CardDescription>
+                </div>
+                {!isCardio && sessionLogs.length > 0 && (
+                  <div>
+                    {!isEditMode ? (
+                      <Button variant="outline" size="sm" onClick={handleEditClick}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={isSaving}>
+                          <X className="h-4 w-4 mr-2" />
+                          Cancel
+                        </Button>
+                        <Button variant="default" size="sm" onClick={handleSaveEdit} disabled={isSaving}>
+                          <Save className="h-4 w-4 mr-2" />
+                          {isSaving ? 'Saving...' : 'Save'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </CardHeader>
           </Card>
+
+          {error && (
+            <Card className="mb-4 border-destructive">
+              <CardContent className="pt-6">
+                <p className="text-sm text-destructive">{error}</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Cardio Session */}
           {isCardio && cardioLog && (
@@ -274,13 +437,14 @@ export function SessionDetail() {
                       <div className="space-y-4">
                         {block.exercises.map((exercise) => {
                           const log = exerciseLogMap.get(exercise.id);
+                          const editValue = isEditMode ? editValues[exercise.id] : null;
                           const isTimeBased = exercise.target.type === 'time';
                           const unit = isTimeBased ? 's' : ' kg';
                           
                           return (
                             <div
                               key={exercise.id}
-                              className="pb-4 border-b last:border-0 last:pb-0"
+                              className={`pb-4 border-b last:border-0 last:pb-0 ${log && !log.completed && log.attempted ? 'opacity-75' : ''}`}
                             >
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex-1">
@@ -297,17 +461,69 @@ export function SessionDetail() {
                                     }
                                   </div>
                                 </div>
-                                {log && (
+                                {log && !isEditMode && (
                                   <div className="flex items-center gap-2 ml-4">
                                     {log.completed ? (
-                                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-                                    ) : (
-                                      <XCircle className="h-5 w-5 text-red-600 shrink-0" />
-                                    )}
+                                      <div className="flex items-center gap-1">
+                                        <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                                        <span className="text-xs text-green-600">Completed</span>
+                                      </div>
+                                    ) : log.attempted ? (
+                                      <div className="flex items-center gap-1">
+                                        <AlertCircle className="h-5 w-5 text-yellow-600 shrink-0" />
+                                        <span className="text-xs text-yellow-600">Attempted</span>
+                                      </div>
+                                    ) : null}
                                   </div>
                                 )}
+                                {isEditMode && log && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteLog(log.id, exercise.id)}
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
-                              {log && (
+                              {isEditMode && editValue ? (
+                                <div className="mt-2 space-y-2">
+                                  <div className="space-y-1">
+                                    <Label htmlFor={`edit-value-${exercise.id}`} className="text-xs">
+                                      Value ({isTimeBased ? 'seconds' : 'kg'})
+                                    </Label>
+                                    <Input
+                                      id={`edit-value-${exercise.id}`}
+                                      type="number"
+                                      step={isTimeBased ? "1" : "0.5"}
+                                      value={editValue.value}
+                                      onChange={(e) => updateEditValue(exercise.id, 'value', parseFloat(e.target.value) || 0)}
+                                      className="h-8"
+                                    />
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`edit-attempted-${exercise.id}`}
+                                      checked={editValue.attempted}
+                                      onCheckedChange={(checked) => updateEditValue(exercise.id, 'attempted', checked === true)}
+                                    />
+                                    <Label htmlFor={`edit-attempted-${exercise.id}`} className="text-xs cursor-pointer">
+                                      Attempted
+                                    </Label>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`edit-completed-${exercise.id}`}
+                                      checked={editValue.completed}
+                                      onCheckedChange={(checked) => updateEditValue(exercise.id, 'completed', checked === true)}
+                                    />
+                                    <Label htmlFor={`edit-completed-${exercise.id}`} className="text-xs cursor-pointer">
+                                      Completed all reps
+                                    </Label>
+                                  </div>
+                                </div>
+                              ) : log ? (
                                 <div className="mt-2">
                                   <div className="flex justify-between items-center">
                                     <span className="text-xs text-muted-foreground">Logged Value</span>
@@ -316,10 +532,9 @@ export function SessionDetail() {
                                     </span>
                                   </div>
                                 </div>
-                              )}
-                              {!log && (
+                              ) : (
                                 <div className="mt-2 text-xs text-muted-foreground italic">
-                                  No data logged for this exercise
+                                  Not attempted
                                 </div>
                               )}
                             </div>

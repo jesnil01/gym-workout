@@ -5,7 +5,7 @@ import type { SupersetBlock } from '../schema/sessionSchema';
 interface SupersetGroupProps {
   block: SupersetBlock;
   sessionId: string;
-  onExerciseUpdate: (exerciseId: string, value: number | null, completed: boolean) => void;
+  onExerciseUpdate: (exerciseId: string, value: number | null, attempted: boolean, completed: boolean) => void;
   sectionNumber: number;
 }
 

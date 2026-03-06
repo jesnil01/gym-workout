@@ -88,7 +88,7 @@ export function Dashboard({ refreshKey }: DashboardProps) {
           for (const [exerciseId, { name: exerciseName, metricType: _metricType }] of exerciseMap.entries()) {
             // Filter to only completed exercises, sorted by timestamp
             const completedLogs = allLogs
-              .filter(log => log.exerciseId === exerciseId && log.completed === true)
+              .filter(log => log.exerciseId === exerciseId && (log.attempted ?? true) && log.completed === true)
               .sort((a, b) => b.timestamp - a.timestamp);
             
             if (completedLogs.length > 0) {

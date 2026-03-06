@@ -11,6 +11,7 @@ import type { SessionV2 } from '../schema/sessionSchema';
 interface SessionEntry {
   exerciseId: string;
   value: number | null;
+  attempted: boolean;
   completed: boolean;
   sessionId: string;
 }
@@ -34,13 +35,14 @@ export function SessionView() {
     setSaveError(null);
   }, [sessionId, sessions]);
 
-  const handleExerciseUpdate = (exerciseId: string, value: number | null, completed: boolean) => {
+  const handleExerciseUpdate = (exerciseId: string, value: number | null, attempted: boolean, completed: boolean) => {
     if (!sessionId) return;
     setSessionEntries(prev => ({
       ...prev,
       [exerciseId]: {
         exerciseId,
         value,
+        attempted,
         completed,
         sessionId
       }
@@ -67,6 +69,7 @@ export function SessionView() {
         await saveLog({
           exerciseId: entry.exerciseId,
           value: entry.value!,
+          attempted: entry.attempted,
           completed: entry.completed,
           sessionId: entry.sessionId
         });
