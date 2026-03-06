@@ -5,8 +5,8 @@ import { useSessionsContext } from '../contexts/SessionsContext';
 import { getSessionUsageCounts } from '../lib/workoutStats';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { ThemeToggle } from './theme-toggle';
-import { ArrowLeft, Play } from 'lucide-react';
+import { PageHeader } from './PageHeader';
+import { Play } from 'lucide-react';
 import type { SessionV2 } from '../schema/sessionSchema';
 
 /**
@@ -103,20 +103,7 @@ export function SessionTemplates() {
   return (
     <div className="min-h-screen p-4 pb-20 relative">
       <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mt-4 mb-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/')}
-            className="h-9 w-9"
-            aria-label="Back to home"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-xl font-bold flex-1 text-center">Session Templates</h1>
-          <ThemeToggle />
-        </div>
+        <PageHeader title="Session Templates" />
 
         {/* Session Templates */}
         {sessions.length > 0 ? (

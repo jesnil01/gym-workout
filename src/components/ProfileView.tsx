@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
-import { ThemeToggle } from './theme-toggle';
+import { PageHeader } from './PageHeader';
 import { downloadJSON } from '../lib/backupUtils';
 import { Download, Trash2 } from 'lucide-react';
 import type { UserProfile, CoachFeedbackEntry } from '../db/indexedDB';
 
 export function ProfileView() {
-  const navigate = useNavigate();
   const [goal, setGoal] = useState<string>('');
   const [facts, setFacts] = useState<string>('');
   const [feedbackEntries, setFeedbackEntries] = useState<CoachFeedbackEntry[]>([]);
@@ -176,29 +174,12 @@ export function ProfileView() {
   }
 
   return (
-    <div className="min-h-screen pb-32 mb-12">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-background shadow-md border-b">
-        <div className="px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/')}
-              className="text-lg"
-              aria-label="Back to home"
-            >
-              ← Back
-            </Button>
-            <h1 className="text-xl font-bold text-foreground flex-1 text-center">
-              Profile
-            </h1>
-            <ThemeToggle />
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen p-4 pb-32 mb-12 relative">
+      <div className="max-w-md mx-auto">
+        <PageHeader title="Profile" />
 
-      {/* Content */}
-      <div className="px-4 pt-4 max-w-md mx-auto">
+        {/* Content */}
+        <div className="pt-4">
         <Card>
           <CardHeader>
             <CardTitle>Profile Configuration</CardTitle>
@@ -361,6 +342,7 @@ export function ProfileView() {
             </p>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   );

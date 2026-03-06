@@ -7,9 +7,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
-import { ThemeToggle } from './theme-toggle';
+import { PageHeader } from './PageHeader';
 import { formatTime, formatPace } from '../lib/utils';
-import { ArrowLeft, CheckCircle2, XCircle, AlertCircle, Edit, Save, X } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, Edit, Save, X } from 'lucide-react';
 import type { WorkoutLogEntry } from '../db/indexedDB';
 import type { SessionV2 } from '../schema/sessionSchema';
 
@@ -397,31 +397,12 @@ export function SessionDetail() {
   });
 
   return (
-    <div className="min-h-screen pb-20 relative">
+    <div className="min-h-screen p-4 pb-20 relative">
       <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-background shadow-md border-b">
-          <div className="px-4 py-4">
-            <div className="flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate('/')}
-                className="h-9 w-9"
-                aria-label="Back to home"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <h1 className="text-xl font-bold text-foreground flex-1 text-center">
-                Session Details
-              </h1>
-              <ThemeToggle />
-            </div>
-          </div>
-        </div>
+        <PageHeader title="Session Details" />
 
         {/* Content */}
-        <div className="px-4 pt-4">
+        <div className="pt-4">
           {/* Session Header */}
           <Card className={`mb-4 ${colors.border} ${colors.bg}`}>
             <CardHeader>
