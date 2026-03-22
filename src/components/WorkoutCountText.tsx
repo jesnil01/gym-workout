@@ -4,7 +4,7 @@ import { getWorkoutCountInDays } from '../lib/workoutStats';
 import { getMockWorkoutCount } from '../lib/mockData';
 
 export function WorkoutCountText() {
-  const { dbReady, getAllLogs } = useIndexedDB();
+  const { dbReady, getAllLogs, getAllLoggedSessions } = useIndexedDB();
   const [workoutCount, setWorkoutCount] = useState<number | null>(null);
   
   const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
@@ -21,8 +21,11 @@ export function WorkoutCountText() {
         if (useMockData) {
           count = getMockWorkoutCount();
         } else {
-          const allLogs = await getAllLogs();
-          count = getWorkoutCountInDays(allLogs, 7);
+          const [allLogs, loggedSessions] = await Promise.all([
+            getAllLogs(),
+            getAllLoggedSessions()
+          ]);
+          count = getWorkoutCountInDays(allLogs, 7, loggedSessions);
         }
         
         setWorkoutCount(count);
@@ -33,7 +36,7 @@ export function WorkoutCountText() {
     };
 
     loadCount();
-  }, [dbReady, getAllLogs, useMockData]);
+  }, [dbReady, getAllLogs, getAllLoggedSessions, useMockData]);
 
   if (workoutCount === null) {
     return null;

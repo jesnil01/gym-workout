@@ -1,4 +1,10 @@
-import type { WorkoutLogEntry, Exercise, BodyWeightEntry, CoachFeedbackEntry } from '../db/indexedDB';
+import type {
+  WorkoutLogEntry,
+  Exercise,
+  BodyWeightEntry,
+  CoachFeedbackEntry,
+  LoggedSession
+} from '../db/indexedDB';
 import type { SupersetBlock, SessionV2 } from '../schema/sessionSchema';
 
 export interface AICoachExportData {
@@ -142,80 +148,99 @@ function formatDate(timestamp: number): string {
 export function groupWorkoutSessions(
   logs: WorkoutLogEntry[],
   exercises: Exercise[],
-  sessions: SessionV2[]
+  sessions: SessionV2[],
+  loggedSessions: LoggedSession[] = []
 ): WorkoutSession[] {
+  const lsById = new Map(loggedSessions.map((ls) => [ls.id, ls]));
+
   const exerciseMap = new Map<string, string>();
-  exercises.forEach(ex => {
+  exercises.forEach((ex) => {
     exerciseMap.set(ex.id, ex.name);
   });
 
   const sessionNameMap = new Map<string, string>();
-  sessions.forEach(session => {
+  sessions.forEach((session) => {
     sessionNameMap.set(session.id, session.name);
   });
   sessionNameMap.set('running', 'Running');
   sessionNameMap.set('floorball', 'Floorball');
 
-  // Group by date + sessionId
-  const sessionMap = new Map<string, {
-    sessionId: string;
-    timestamp: number;
-    exercises: Map<string, WorkoutExercise>;
-    cardio?: {
-      type: string;
-      time?: number;
-      pace?: number;
-    };
-  }>();
+  const sessionMap = new Map<
+    string,
+    {
+      sessionId: string;
+      timestamp: number;
+      exercises: Map<string, WorkoutExercise>;
+      cardio?: {
+        type: string;
+        time?: number;
+        pace?: number;
+      };
+    }
+  >();
 
-  logs.forEach(log => {
-    // Exclude non-attempted exercises from statistics
+  logs.forEach((log) => {
     if (!(log.attempted ?? true)) return;
 
-    const date = new Date(log.timestamp);
-    const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
+    let dateKey: string;
+    let baseTs: number;
+
+    if (log.sessionInstanceId && lsById.has(log.sessionInstanceId)) {
+      const ls = lsById.get(log.sessionInstanceId)!;
+      dateKey = `inst:${log.sessionInstanceId}`;
+      baseTs = ls.occurredAt;
+    } else {
+      const date = new Date(log.timestamp);
+      dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
+      baseTs = log.timestamp;
+    }
 
     if (!sessionMap.has(dateKey)) {
       sessionMap.set(dateKey, {
         sessionId: log.sessionId,
-        timestamp: log.timestamp,
-        exercises: new Map(),
+        timestamp: baseTs,
+        exercises: new Map()
       });
     }
 
     const session = sessionMap.get(dateKey)!;
 
-    // Handle cardio sessions
     if (log.type === 'cardio') {
       session.cardio = {
         type: log.sessionId,
         time: log.time,
-        pace: log.pace,
+        pace: log.pace
       };
-      // Update timestamp to most recent for cardio
       if (log.timestamp > session.timestamp) {
         session.timestamp = log.timestamp;
       }
     } else {
-      // Handle regular exercises
       const exerciseName = exerciseMap.get(log.exerciseId) || log.exerciseId;
-      // Regular exercises use kg, cardio uses seconds (but cardio is handled above)
       const unit = 'kg';
-      
+
       session.exercises.set(log.exerciseId, {
         exerciseId: log.exerciseId,
         exerciseName,
         value: log.value,
         unit,
-        allSetsCompletedSuccessfully: log.completed,
+        allSetsCompletedSuccessfully: log.completed
       });
 
-      // Use earliest timestamp for regular sessions
       if (log.timestamp < session.timestamp) {
         session.timestamp = log.timestamp;
       }
     }
   });
+
+  for (const [key, val] of sessionMap) {
+    if (key.startsWith('inst:')) {
+      const id = key.slice(5);
+      const ls = lsById.get(id);
+      if (ls) {
+        val.timestamp = ls.occurredAt;
+      }
+    }
+  }
 
   // Convert to array and format
   return Array.from(sessionMap.values())
@@ -277,7 +302,7 @@ export function formatBodyWeightLog(weights: BodyWeightEntry[]): BodyWeightLogEn
  * Calculate comprehensive statistics
  */
 export function calculateStatistics(
-  logs: WorkoutLogEntry[],
+  _logs: WorkoutLogEntry[],
   sessions: WorkoutSession[]
 ): Statistics {
   const now = Date.now();

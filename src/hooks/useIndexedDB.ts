@@ -1,5 +1,41 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initDB, saveWorkoutLog, getLastExerciseEntry, getLastNExerciseEntries, getSessionHistory, saveExercise, getWorkoutsInDateRange, getAllWorkoutLogs, getAllExercises, exportBackup, importBackup, saveBodyWeight, getAllBodyWeights, saveUserProfile, getUserProfile, exportAICoachData, saveCoachFeedback, getAllCoachFeedback, deleteCoachFeedback, updateWorkoutLog, deleteWorkoutLog, saveSessionEntries, type Exercise, type WorkoutLogEntry, type BackupData, type ImportResult, type BodyWeightEntry, type UserProfile, type CoachFeedbackEntry } from '../db/indexedDB';
+import {
+  initDB,
+  runLoggedSessionsBackfill,
+  saveWorkoutLog,
+  getLastExerciseEntry,
+  getLastNExerciseEntries,
+  getSessionHistory,
+  saveExercise,
+  getWorkoutsInDateRange,
+  getAllWorkoutLogs,
+  getAllLoggedSessions,
+  getLoggedSession,
+  getWorkoutLogsBySessionInstanceId,
+  getAllExercises,
+  exportBackup,
+  importBackup,
+  saveBodyWeight,
+  getAllBodyWeights,
+  saveUserProfile,
+  getUserProfile,
+  exportAICoachData,
+  saveCoachFeedback,
+  getAllCoachFeedback,
+  deleteCoachFeedback,
+  updateWorkoutLog,
+  deleteWorkoutLog,
+  saveSessionEntries,
+  updateLoggedSessionDate,
+  type Exercise,
+  type WorkoutLogEntry,
+  type BackupData,
+  type ImportResult,
+  type BodyWeightEntry,
+  type UserProfile,
+  type CoachFeedbackEntry,
+  type LoggedSession
+} from '../db/indexedDB';
 import type { AICoachExportData } from '../lib/aiCoachExport';
 
 export function useIndexedDB() {
@@ -8,6 +44,7 @@ export function useIndexedDB() {
 
   useEffect(() => {
     initDB()
+      .then(() => runLoggedSessionsBackfill())
       .then(() => {
         setDbReady(true);
         setError(null);
@@ -78,6 +115,40 @@ export function useIndexedDB() {
       return await getAllWorkoutLogs();
     } catch (err) {
       console.error('Failed to get all logs:', err);
+      return [];
+    }
+  }, []);
+
+  const getAllLoggedSessionsData = useCallback(async (): Promise<LoggedSession[]> => {
+    try {
+      return await getAllLoggedSessions();
+    } catch (err) {
+      console.error('Failed to get logged sessions:', err);
+      return [];
+    }
+  }, []);
+
+  const updateLoggedSessionDateData = useCallback(
+    async (sessionInstanceId: string, newOccurredAtNoon: number): Promise<void> => {
+      await updateLoggedSessionDate(sessionInstanceId, newOccurredAtNoon);
+    },
+    []
+  );
+
+  const getLoggedSessionData = useCallback(async (id: string) => {
+    try {
+      return await getLoggedSession(id);
+    } catch (err) {
+      console.error('Failed to get logged session:', err);
+      return null;
+    }
+  }, []);
+
+  const getWorkoutLogsBySessionInstanceIdData = useCallback(async (sessionInstanceId: string) => {
+    try {
+      return await getWorkoutLogsBySessionInstanceId(sessionInstanceId);
+    } catch (err) {
+      console.error('Failed to get logs for session:', err);
       return [];
     }
   }, []);
@@ -231,6 +302,10 @@ export function useIndexedDB() {
     deleteCoachFeedback: deleteCoachFeedbackData,
     updateLog,
     deleteLog,
-    saveSessionEntries: saveSessionEntriesData
+    saveSessionEntries: saveSessionEntriesData,
+    getAllLoggedSessions: getAllLoggedSessionsData,
+    updateLoggedSessionDate: updateLoggedSessionDateData,
+    getLoggedSession: getLoggedSessionData,
+    getWorkoutLogsBySessionInstanceId: getWorkoutLogsBySessionInstanceIdData
   };
 }

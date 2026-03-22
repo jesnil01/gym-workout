@@ -12,7 +12,7 @@ interface WorkoutSubtitleProps {
 
 export function WorkoutSubtitle({ fontFamily = "'Poppins', sans-serif", color }: WorkoutSubtitleProps) {
   const { sessions } = useSessionsContext();
-  const { dbReady, getAllLogs } = useIndexedDB();
+  const { dbReady, getAllLogs, getAllLoggedSessions } = useIndexedDB();
   const [message, setMessage] = useState<string>('');
   const [isVisible, setIsVisible] = useState(false);
   
@@ -30,8 +30,11 @@ export function WorkoutSubtitle({ fontFamily = "'Poppins', sans-serif", color }:
         if (useMockData) {
           completedSessions = getMockCompletedSessions(sessions);
         } else {
-          const allLogs = await getAllLogs();
-          completedSessions = getCompletedSessions(allLogs, sessions);
+          const [allLogs, loggedSessions] = await Promise.all([
+            getAllLogs(),
+            getAllLoggedSessions()
+          ]);
+          completedSessions = getCompletedSessions(allLogs, sessions, loggedSessions);
         }
         
         const status = getWorkoutStatus(completedSessions);
@@ -50,7 +53,7 @@ export function WorkoutSubtitle({ fontFamily = "'Poppins', sans-serif", color }:
     };
 
     loadMessage();
-  }, [dbReady, getAllLogs, useMockData, sessions]);
+  }, [dbReady, getAllLogs, getAllLoggedSessions, useMockData, sessions]);
 
   // Initial visibility animation
   useEffect(() => {

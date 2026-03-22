@@ -1,4 +1,4 @@
-import type { WorkoutLogEntry } from '../db/indexedDB';
+import type { LoggedSession, WorkoutLogEntry } from '../db/indexedDB';
 import type { SessionV2 } from '../schema/sessionSchema';
 
 export interface CompletedSession {
@@ -8,30 +8,39 @@ export interface CompletedSession {
   type?: 'cardio';
   time?: number; // Time in seconds
   pace?: number; // Pace per km in minutes (only for running)
+  /** Present when row comes from LoggedSession + instance-linked logs */
+  instanceId?: string;
 }
 
 /**
  * Get unique workout sessions count in the last N days
  * A workout is defined as a unique combination of sessionId + date
  */
-export function getWorkoutCountInDays(logs: WorkoutLogEntry[], days: number): number {
+export function getWorkoutCountInDays(
+  logs: WorkoutLogEntry[],
+  days: number,
+  loggedSessions: LoggedSession[] = []
+): number {
   const now = Date.now();
-  const daysAgo = now - (days * 24 * 60 * 60 * 1000);
-  
-  // Filter logs within date range, exclude non-attempted exercises
-  const recentLogs = logs.filter(log => 
-    log.timestamp >= daysAgo && (log.attempted ?? true) === true
+  const daysAgo = now - days * 24 * 60 * 60 * 1000;
+
+  const recentLogs = logs.filter(
+    (log) => log.timestamp >= daysAgo && (log.attempted ?? true) === true
   );
-  
-  // Group by sessionId + date (day)
+
+  const lsById = new Map(loggedSessions.map((ls) => [ls.id, ls]));
   const uniqueWorkouts = new Set<string>();
-  
-  recentLogs.forEach(log => {
-    const date = new Date(log.timestamp);
-    const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
-    uniqueWorkouts.add(dateKey);
+
+  recentLogs.forEach((log) => {
+    if (log.sessionInstanceId && lsById.has(log.sessionInstanceId)) {
+      uniqueWorkouts.add(`i:${log.sessionInstanceId}`);
+    } else {
+      const date = new Date(log.timestamp);
+      const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
+      uniqueWorkouts.add(`l:${dateKey}`);
+    }
   });
-  
+
   return uniqueWorkouts.size;
 }
 
@@ -75,71 +84,117 @@ export function formatWeightProgression(
  * Groups logs by unique sessionId + date combinations
  * Returns array of completed sessions sorted by most recent first
  */
-export function getCompletedSessions(logs: WorkoutLogEntry[], sessions: SessionV2[]): CompletedSession[] {
-  // Create a map to store unique sessions by sessionId + date
-  const sessionMap = new Map<string, { sessionId: string; timestamp: number; type?: 'cardio'; time?: number; pace?: number }>();
-  
-  // Create a map of sessionId to sessionName
+export function getCompletedSessions(
+  logs: WorkoutLogEntry[],
+  sessions: SessionV2[],
+  loggedSessions: LoggedSession[] = []
+): CompletedSession[] {
   const sessionNameMap = new Map<string, string>();
-  sessions.forEach(session => {
+  sessions.forEach((session) => {
     sessionNameMap.set(session.id, session.name);
   });
-  
-  // Add cardio session names
   sessionNameMap.set('running', 'Running');
   sessionNameMap.set('floorball', 'Floorball');
-  
-  // Group logs by sessionId + date
-  logs.forEach(log => {
-    // Only include attempted and completed exercises
+
+  const lsById = new Map(loggedSessions.map((ls) => [ls.id, ls]));
+
+  const instanceMap = new Map<
+    string,
+    {
+      sessionId: string;
+      timestamp: number;
+      type?: 'cardio';
+      time?: number;
+      pace?: number;
+      instanceId: string;
+    }
+  >();
+
+  const legacyMap = new Map<
+    string,
+    { sessionId: string; timestamp: number; type?: 'cardio'; time?: number; pace?: number }
+  >();
+
+  logs.forEach((log) => {
     if (!(log.attempted ?? true) || !log.completed) {
       return;
     }
-    
-    const date = new Date(log.timestamp);
-    const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
-    
-    // If this session+date combo doesn't exist, create it
-    if (!sessionMap.has(dateKey)) {
-      sessionMap.set(dateKey, {
-        sessionId: log.sessionId,
-        timestamp: log.timestamp,
-        type: log.type,
-        time: log.time,
-        pace: log.pace
-      });
-    } else {
-      // For cardio sessions, use the most recent timestamp and data
-      // For regular sessions, use the earliest timestamp (when workout started)
-      const existing = sessionMap.get(dateKey)!;
-      if (log.type === 'cardio') {
-        // Cardio: always update to most recent
-        existing.timestamp = log.timestamp;
-        existing.type = log.type;
-        existing.time = log.time;
-        existing.pace = log.pace;
+
+    if (log.sessionInstanceId && lsById.has(log.sessionInstanceId)) {
+      const key = log.sessionInstanceId;
+      if (!instanceMap.has(key)) {
+        instanceMap.set(key, {
+          sessionId: log.sessionId,
+          timestamp: log.timestamp,
+          type: log.type,
+          time: log.time,
+          pace: log.pace,
+          instanceId: key
+        });
       } else {
-        // Regular sessions: use earliest timestamp
-        if (log.timestamp < existing.timestamp) {
+        const existing = instanceMap.get(key)!;
+        if (log.type === 'cardio') {
+          if (log.timestamp > existing.timestamp) {
+            existing.timestamp = log.timestamp;
+            existing.type = log.type;
+            existing.time = log.time;
+            existing.pace = log.pace;
+          }
+        } else if (log.timestamp < existing.timestamp) {
+          existing.timestamp = log.timestamp;
+        }
+      }
+    } else {
+      const date = new Date(log.timestamp);
+      const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${log.sessionId}`;
+      if (!legacyMap.has(dateKey)) {
+        legacyMap.set(dateKey, {
+          sessionId: log.sessionId,
+          timestamp: log.timestamp,
+          type: log.type,
+          time: log.time,
+          pace: log.pace
+        });
+      } else {
+        const existing = legacyMap.get(dateKey)!;
+        if (log.type === 'cardio') {
+          if (log.timestamp > existing.timestamp) {
+            existing.timestamp = log.timestamp;
+            existing.type = log.type;
+            existing.time = log.time;
+            existing.pace = log.pace;
+          }
+        } else if (log.timestamp < existing.timestamp) {
           existing.timestamp = log.timestamp;
         }
       }
     }
   });
-  
-  // Convert to array and add session names
-  const completedSessions: CompletedSession[] = Array.from(sessionMap.values())
-    .map(({ sessionId, timestamp, type, time, pace }) => ({
+
+  const fromInstances: CompletedSession[] = Array.from(instanceMap.values()).map(
+    ({ sessionId, timestamp, type, time, pace, instanceId }) => ({
+      sessionId,
+      sessionName: sessionNameMap.get(sessionId) || `Session ${sessionId}`,
+      timestamp,
+      type,
+      time,
+      pace,
+      instanceId
+    })
+  );
+
+  const fromLegacy: CompletedSession[] = Array.from(legacyMap.values()).map(
+    ({ sessionId, timestamp, type, time, pace }) => ({
       sessionId,
       sessionName: sessionNameMap.get(sessionId) || `Session ${sessionId}`,
       timestamp,
       type,
       time,
       pace
-    }))
-    .sort((a, b) => b.timestamp - a.timestamp); // Sort by most recent first
-  
-  return completedSessions;
+    })
+  );
+
+  return [...fromInstances, ...fromLegacy].sort((a, b) => b.timestamp - a.timestamp);
 }
 
 /**
@@ -147,10 +202,11 @@ export function getCompletedSessions(logs: WorkoutLogEntry[], sessions: SessionV
  * Returns a map of sessionId -> count of completed sessions
  */
 export function getSessionUsageCounts(
-  logs: WorkoutLogEntry[], 
-  sessions: SessionV2[]
+  logs: WorkoutLogEntry[],
+  sessions: SessionV2[],
+  loggedSessions: LoggedSession[] = []
 ): Map<string, number> {
-  const completedSessions = getCompletedSessions(logs, sessions);
+  const completedSessions = getCompletedSessions(logs, sessions, loggedSessions);
   const countMap = new Map<string, number>();
   
   completedSessions.forEach(session => {

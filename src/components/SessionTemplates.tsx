@@ -50,7 +50,7 @@ function formatExerciseTarget(target: SessionV2['blocks'][0]['exercises'][0]['ta
 export function SessionTemplates() {
   const navigate = useNavigate();
   const { sessions } = useSessionsContext();
-  const { dbReady, getAllLogs } = useIndexedDB();
+  const { dbReady, getAllLogs, getAllLoggedSessions } = useIndexedDB();
   const [usageCounts, setUsageCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   
@@ -70,10 +70,13 @@ export function SessionTemplates() {
           const { getMockWorkoutLogs } = await import('../lib/mockData');
           allLogs = getMockWorkoutLogs();
         } else {
-          allLogs = await getAllLogs();
+          const [logs, loggedSessions] = await Promise.all([getAllLogs(), getAllLoggedSessions()]);
+          const counts = getSessionUsageCounts(logs, sessions, loggedSessions);
+          setUsageCounts(counts);
+          return;
         }
-        
-        const counts = getSessionUsageCounts(allLogs, sessions);
+
+        const counts = getSessionUsageCounts(allLogs!, sessions);
         setUsageCounts(counts);
       } catch (error) {
         console.error('Failed to load usage counts:', error);
@@ -83,7 +86,7 @@ export function SessionTemplates() {
     };
 
     loadData();
-  }, [dbReady, getAllLogs, useMockData, sessions]);
+  }, [dbReady, getAllLogs, getAllLoggedSessions, useMockData, sessions]);
 
   const handleStartSession = (sessionId: string) => {
     navigate(`/session/${sessionId}`);

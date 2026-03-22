@@ -14,21 +14,27 @@ interface DashboardProps {
 }
 
 /**
- * Generate a session key from a completed session
- * Format: YYYY-M-D-sessionId
+ * Legacy URL segment: YYYY-M-D-sessionId
  */
-function getSessionKey(session: CompletedSession): string {
+function getLegacySessionKey(session: CompletedSession): string {
   const date = new Date(session.timestamp);
   const year = date.getFullYear();
-  const month = date.getMonth(); // 0-indexed
+  const month = date.getMonth();
   const day = date.getDate();
   return `${year}-${month}-${day}-${session.sessionId}`;
+}
+
+function getSessionDetailPath(session: CompletedSession): string {
+  if (session.instanceId) {
+    return session.instanceId;
+  }
+  return getLegacySessionKey(session);
 }
 
 export function Dashboard({ refreshKey }: DashboardProps) {
   const navigate = useNavigate();
   const { sessions } = useSessionsContext();
-  const { dbReady, getAllLogs, getAllBodyWeights } = useIndexedDB();
+  const { dbReady, getAllLogs, getAllBodyWeights, getAllLoggedSessions } = useIndexedDB();
   const [progressions, setProgressions] = useState<Map<string, {current: number; previous: number | null; exerciseName: string; timestamp?: number}>>(new Map());
   const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
   const [bodyWeightEntries, setBodyWeightEntries] = useState<BodyWeightEntry[]>([]);
@@ -56,10 +62,12 @@ export function Dashboard({ refreshKey }: DashboardProps) {
       } else {
         // Use real data
         try {
-          const allLogs = await getAllLogs();
-          
-          // Get completed sessions
-          const completedSessionsList = getCompletedSessions(allLogs, sessions);
+          const [allLogs, loggedSessionsList] = await Promise.all([
+            getAllLogs(),
+            getAllLoggedSessions()
+          ]);
+
+          const completedSessionsList = getCompletedSessions(allLogs, sessions, loggedSessionsList);
           setCompletedSessions(completedSessionsList);
           
           // Get body weight entries
@@ -115,7 +123,7 @@ export function Dashboard({ refreshKey }: DashboardProps) {
     };
 
     loadData();
-  }, [dbReady, getAllLogs, getAllBodyWeights, useMockData, refreshKey, sessions]);
+  }, [dbReady, getAllLogs, getAllBodyWeights, getAllLoggedSessions, useMockData, refreshKey, sessions]);
 
   if (loading) {
     return (
@@ -286,11 +294,11 @@ export function Dashboard({ refreshKey }: DashboardProps) {
               {completedSessions.slice(0, 10).map((session) => {
                 const colors = getSessionColor(session.sessionId);
                 const isCardio = session.type === 'cardio';
-                const sessionKey = getSessionKey(session);
+                const detailPath = getSessionDetailPath(session);
                 return (
                 <div 
-                  key={`${session.sessionId}-${session.timestamp}`}
-                  onClick={() => navigate(`/sessions/${sessionKey}`)}
+                  key={session.instanceId ?? `${session.sessionId}-${session.timestamp}`}
+                  onClick={() => navigate(`/sessions/${detailPath}`)}
                   className={`flex items-center justify-between py-2.5 px-3 rounded-md border-r border-t border-b cursor-pointer hover:shadow-md transition-shadow ${colors.border} ${colors.bg}`}
                 >
                   <div className="flex-1">

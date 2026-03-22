@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { useSessionsContext } from '../contexts/SessionsContext';
@@ -9,9 +9,11 @@ import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
 import { PageHeader } from './PageHeader';
 import { formatTime, formatPace } from '../lib/utils';
-import { CheckCircle2, XCircle, AlertCircle, Edit, Save, X } from 'lucide-react';
-import type { WorkoutLogEntry } from '../db/indexedDB';
+import { CheckCircle2, AlertCircle, Edit, Save, X } from 'lucide-react';
+import type { LoggedSession, WorkoutLogEntry } from '../db/indexedDB';
 import type { SessionV2 } from '../schema/sessionSchema';
+import { isSessionInstanceIdParam, sameLocalCalendarDay } from '../lib/loggedSessionMigration';
+import { resolveSessionTemplate } from '../lib/sessionTemplate';
 
 /**
  * Parse session key to extract date and sessionId
@@ -20,22 +22,19 @@ import type { SessionV2 } from '../schema/sessionSchema';
 function parseSessionKey(sessionKey: string): { year: number; month: number; day: number; sessionId: string } | null {
   const parts = sessionKey.split('-');
   if (parts.length < 4) return null;
-  
-  const sessionId = parts.slice(3).join('-'); // Handle sessionIds with dashes
+
+  const sessionId = parts.slice(3).join('-');
   const year = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10);
   const day = parseInt(parts[2], 10);
-  
+
   if (isNaN(year) || isNaN(month) || isNaN(day) || !sessionId) {
     return null;
   }
-  
+
   return { year, month, day, sessionId };
 }
 
-/**
- * Check if a timestamp falls on a specific date
- */
 function isSameDate(timestamp: number, year: number, month: number, day: number): boolean {
   const date = new Date(timestamp);
   return (
@@ -45,22 +44,32 @@ function isSameDate(timestamp: number, year: number, month: number, day: number)
   );
 }
 
-/**
- * Format session date for display
- */
 function formatSessionDate(timestamp: number): string {
   const date = new Date(timestamp);
-  return date.toLocaleDateString('en-US', { 
+  return date.toLocaleDateString('en-US', {
     weekday: 'long',
-    month: 'long', 
-    day: 'numeric', 
-    year: 'numeric' 
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
   });
 }
 
-/**
- * Get color classes for session
- */
+function toDateInputValue(ts: number): string {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function noonFromDateInputValue(s: string): number {
+  const [ys, ms, ds] = s.split('-');
+  const y = parseInt(ys, 10);
+  const mo = parseInt(ms, 10) - 1;
+  const day = parseInt(ds, 10);
+  return new Date(y, mo, day, 12, 0, 0).getTime();
+}
+
 function getSessionColor(sessionId: string): { border: string; bg: string } {
   switch (sessionId) {
     case 'A':
@@ -82,17 +91,67 @@ export function SessionDetail() {
   const { sessionKey } = useParams<{ sessionKey: string }>();
   const navigate = useNavigate();
   const { sessions } = useSessionsContext();
-  const { dbReady, getAllLogs, updateLog, deleteLog, saveLog } = useIndexedDB();
+  const {
+    dbReady,
+    getAllLogs,
+    updateLog,
+    deleteLog,
+    saveLog,
+    getLoggedSession,
+    getWorkoutLogsBySessionInstanceId,
+    updateLoggedSessionDate
+  } = useIndexedDB();
+
   const [session, setSession] = useState<SessionV2 | null>(null);
   const [sessionLogs, setSessionLogs] = useState<WorkoutLogEntry[]>([]);
+  const [loggedSessionRecord, setLoggedSessionRecord] = useState<LoggedSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [editValues, setEditValues] = useState<Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }>>({});
+  const [editValues, setEditValues] = useState<
+    Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }>
+  >({});
   const [isSaving, setIsSaving] = useState(false);
-  const [parsedDate, setParsedDate] = useState<{ year: number; month: number; day: number; sessionId: string } | null>(null);
-  
+  const [parsedDate, setParsedDate] = useState<{
+    year: number;
+    month: number;
+    day: number;
+    sessionId: string;
+  } | null>(null);
+  const [editDateStr, setEditDateStr] = useState('');
+
   const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
+
+  const buildEditMap = useCallback(
+    (foundSession: SessionV2, filteredLogs: WorkoutLogEntry[]) => {
+      const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }> = {};
+      filteredLogs.forEach((log) => {
+        if (log.type !== 'cardio') {
+          editMap[log.exerciseId] = {
+            value: log.value,
+            attempted: log.attempted ?? true,
+            completed: log.completed,
+            id: log.id!
+          };
+        }
+      });
+      foundSession.blocks.forEach((block) => {
+        if (block.type === 'superset') {
+          block.exercises.forEach((exercise) => {
+            if (!editMap[exercise.id]) {
+              editMap[exercise.id] = {
+                value: 0,
+                attempted: false,
+                completed: false
+              };
+            }
+          });
+        }
+      });
+      return editMap;
+    },
+    []
+  );
 
   useEffect(() => {
     if (!sessionKey) {
@@ -101,24 +160,11 @@ export function SessionDetail() {
       return;
     }
 
-    const parsed = parseSessionKey(sessionKey);
-    if (!parsed) {
-      setError('Invalid session key format');
+    if (useMockData && isSessionInstanceIdParam(sessionKey)) {
+      setError('Session instance URLs require real data (disable mock mode).');
       setLoading(false);
       return;
     }
-
-    setParsedDate(parsed);
-
-    // Find the session config
-    const foundSession = sessions.find(s => s.id === parsed.sessionId);
-    if (!foundSession) {
-      setError('Session not found');
-      setLoading(false);
-      return;
-    }
-
-    setSession(foundSession);
 
     if (!dbReady && !useMockData) {
       return;
@@ -127,65 +173,82 @@ export function SessionDetail() {
     const loadData = async () => {
       setLoading(true);
       setError(null);
-      
+      setLoggedSessionRecord(null);
+      setParsedDate(null);
+
       try {
-        let allLogs: WorkoutLogEntry[];
-        
         if (useMockData) {
-          const { getMockWorkoutLogs } = await import('../lib/mockData');
-          allLogs = getMockWorkoutLogs();
-        } else {
-          allLogs = await getAllLogs();
-        }
-
-        // Filter logs for this specific session and date
-        // Show all attempted exercises (not just completed ones)
-        const filteredLogs = allLogs.filter(log => 
-          log.sessionId === parsed.sessionId &&
-          (log.attempted ?? true) === true && // Default to true for backward compatibility
-          isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
-        );
-
-        // For cardio sessions, we might have only one log entry
-        // For regular sessions, we'll have multiple exercise logs
-        setSessionLogs(filteredLogs);
-        
-        // Initialize edit values for ALL exercises in the session (not just ones with logs)
-        // This allows editing non-attempted exercises
-        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }> = {};
-        
-        // First, add all existing logs
-        filteredLogs.forEach(log => {
-          if (log.type !== 'cardio') {
-            editMap[log.exerciseId] = {
-              value: log.value,
-              attempted: log.attempted ?? true,
-              completed: log.completed,
-              id: log.id!
-            };
+          const parsed = parseSessionKey(sessionKey);
+          if (!parsed) {
+            setError('Invalid session key format');
+            setLoading(false);
+            return;
           }
-        });
-        
-        // Then, add all exercises from the session that don't have logs yet
-        if (foundSession) {
-          foundSession.blocks.forEach(block => {
-            if (block.type === 'superset') {
-              block.exercises.forEach(exercise => {
-                if (!editMap[exercise.id]) {
-                  // Create a placeholder entry for non-attempted exercises
-                  editMap[exercise.id] = {
-                    value: 0,
-                    attempted: false,
-                    completed: false
-                    // No id - this will be a new log entry
-                  };
-                }
-              });
-            }
-          });
+          setParsedDate(parsed);
+          const foundSession = resolveSessionTemplate(parsed.sessionId, sessions);
+          if (!foundSession) {
+            setError('Session not found');
+            setLoading(false);
+            return;
+          }
+          setSession(foundSession);
+          const { getMockWorkoutLogs } = await import('../lib/mockData');
+          const allLogs = getMockWorkoutLogs();
+          const filteredLogs = allLogs.filter(
+            (log) =>
+              log.sessionId === parsed.sessionId &&
+              (log.attempted ?? true) === true &&
+              isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+          );
+          setSessionLogs(filteredLogs);
+          setEditValues(buildEditMap(foundSession, filteredLogs));
+          setLoading(false);
+          return;
         }
-        
-        setEditValues(editMap);
+
+        if (isSessionInstanceIdParam(sessionKey)) {
+          const ls = await getLoggedSession(sessionKey);
+          if (!ls) {
+            setError('Session not found');
+            setLoading(false);
+            return;
+          }
+          setLoggedSessionRecord(ls);
+          const foundSession = resolveSessionTemplate(ls.templateSessionId, sessions);
+          if (!foundSession) {
+            setError('Session not found');
+            setLoading(false);
+            return;
+          }
+          setSession(foundSession);
+          const filteredLogs = await getWorkoutLogsBySessionInstanceId(sessionKey);
+          setSessionLogs(filteredLogs);
+          setEditValues(buildEditMap(foundSession, filteredLogs));
+        } else {
+          const parsed = parseSessionKey(sessionKey);
+          if (!parsed) {
+            setError('Invalid session key format');
+            setLoading(false);
+            return;
+          }
+          setParsedDate(parsed);
+          const foundSession = resolveSessionTemplate(parsed.sessionId, sessions);
+          if (!foundSession) {
+            setError('Session not found');
+            setLoading(false);
+            return;
+          }
+          setSession(foundSession);
+          const allLogs = await getAllLogs();
+          const filteredLogs = allLogs.filter(
+            (log) =>
+              log.sessionId === parsed.sessionId &&
+              (log.attempted ?? true) === true &&
+              isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+          );
+          setSessionLogs(filteredLogs);
+          setEditValues(buildEditMap(foundSession, filteredLogs));
+        }
       } catch (err) {
         console.error('Failed to load session details:', err);
         setError('Failed to load session details');
@@ -195,87 +258,140 @@ export function SessionDetail() {
     };
 
     loadData();
-  }, [sessionKey, sessions, dbReady, getAllLogs, useMockData]);
+  }, [sessionKey, sessions, dbReady, getAllLogs, useMockData, getLoggedSession, getWorkoutLogsBySessionInstanceId, buildEditMap]);
 
   const handleEditClick = () => {
+    if (loggedSessionRecord) {
+      setEditDateStr(toDateInputValue(loggedSessionRecord.occurredAt));
+    } else if (parsedDate) {
+      setEditDateStr(
+        toDateInputValue(new Date(parsedDate.year, parsedDate.month, parsedDate.day, 12, 0, 0).getTime())
+      );
+    }
     setIsEditMode(true);
   };
 
   const handleCancelEdit = () => {
     setIsEditMode(false);
-    // Reload data to reset edit values
-    const parsed = parseSessionKey(sessionKey!);
-    if (parsed && dbReady && session) {
-      getAllLogs().then(allLogs => {
-        const filteredLogs = allLogs.filter(log => 
-          log.sessionId === parsed.sessionId &&
-          (log.attempted ?? true) === true &&
-          isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+    if (!sessionKey || !session) return;
+
+    const reload = async () => {
+      if (useMockData) {
+        const parsed = parseSessionKey(sessionKey);
+        if (!parsed) return;
+        const { getMockWorkoutLogs } = await import('../lib/mockData');
+        const allLogs = getMockWorkoutLogs();
+        const filteredLogs = allLogs.filter(
+          (log) =>
+            log.sessionId === parsed.sessionId &&
+            (log.attempted ?? true) === true &&
+            isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
         );
         setSessionLogs(filteredLogs);
-        
-        // Initialize edit values for ALL exercises
-        const editMap: Record<string, { value: number; attempted: boolean; completed: boolean; id?: number }> = {};
-        
-        // Add existing logs
-        filteredLogs.forEach(log => {
-          if (log.type !== 'cardio') {
-            editMap[log.exerciseId] = {
-              value: log.value,
-              attempted: log.attempted ?? true,
-              completed: log.completed,
-              id: log.id!
-            };
-          }
-        });
-        
-        // Add exercises without logs
-        session.blocks.forEach(block => {
-          if (block.type === 'superset') {
-            block.exercises.forEach(exercise => {
-              if (!editMap[exercise.id]) {
-                editMap[exercise.id] = {
-                  value: 0,
-                  attempted: false,
-                  completed: false
-                };
-              }
-            });
-          }
-        });
-        
-        setEditValues(editMap);
-      });
-    }
+        setEditValues(buildEditMap(session, filteredLogs));
+        return;
+      }
+
+      if (isSessionInstanceIdParam(sessionKey)) {
+        const filteredLogs = await getWorkoutLogsBySessionInstanceId(sessionKey);
+        setSessionLogs(filteredLogs);
+        setEditValues(buildEditMap(session, filteredLogs));
+      } else {
+        const parsed = parseSessionKey(sessionKey);
+        if (!parsed) return;
+        const allLogs = await getAllLogs();
+        const filteredLogs = allLogs.filter(
+          (log) =>
+            log.sessionId === parsed.sessionId &&
+            (log.attempted ?? true) === true &&
+            isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+        );
+        setSessionLogs(filteredLogs);
+        setEditValues(buildEditMap(session, filteredLogs));
+      }
+    };
+
+    reload();
   };
 
   const handleSaveEdit = async () => {
     setIsSaving(true);
     setError(null);
-    
+
     try {
-      if (!parsedDate || !session) {
+      if (!session) {
         setError('Session data not available');
         setIsSaving(false);
         return;
       }
-      
-      // Create timestamp from parsed date (use noon to avoid timezone issues)
-      const sessionTimestamp = new Date(parsedDate.year, parsedDate.month, parsedDate.day, 12, 0, 0).getTime();
-      
-      // Update existing logs and create new ones
+
+      const targetNoon = noonFromDateInputValue(editDateStr);
+
+      if (loggedSessionRecord && isSessionInstanceIdParam(sessionKey!)) {
+        const instanceId = loggedSessionRecord.id;
+        if (!sameLocalCalendarDay(targetNoon, loggedSessionRecord.occurredAt)) {
+          await updateLoggedSessionDate(instanceId, targetNoon);
+          const updated = await getLoggedSession(sessionKey!);
+          if (updated) setLoggedSessionRecord(updated);
+        }
+
+        const lsAfter = await getLoggedSession(sessionKey!);
+        const noon = lsAfter?.occurredAt ?? targetNoon;
+
+        for (const [exerciseId, editValue] of Object.entries(editValues)) {
+          if (editValue.attempted) {
+            if (editValue.id !== undefined) {
+              await updateLog(editValue.id, {
+                value: editValue.value,
+                attempted: editValue.attempted,
+                completed: editValue.completed,
+                timestamp: noon
+              });
+            } else {
+              const newLogId = await saveLog({
+                exerciseId,
+                value: editValue.value,
+                attempted: editValue.attempted,
+                completed: editValue.completed,
+                sessionId: session.id,
+                sessionInstanceId: instanceId
+              });
+              await updateLog(newLogId, { timestamp: noon });
+            }
+          } else if (editValue.id !== undefined) {
+            await deleteLog(editValue.id);
+          }
+        }
+
+        const refreshed = await getWorkoutLogsBySessionInstanceId(sessionKey!);
+        setSessionLogs(refreshed);
+        setIsEditMode(false);
+        setIsSaving(false);
+        return;
+      }
+
+      if (!parsedDate) {
+        setError('Session data not available');
+        setIsSaving(false);
+        return;
+      }
+
+      const newDate = new Date(targetNoon);
+      const ny = newDate.getFullYear();
+      const nm = newDate.getMonth();
+      const nd = newDate.getDate();
+      const newCompositeKey = `${ny}-${nm}-${nd}-${parsedDate.sessionId}`;
+
       for (const [exerciseId, editValue] of Object.entries(editValues)) {
-        // Only save if attempted is true (we don't want to create logs for non-attempted exercises)
         if (editValue.attempted) {
           if (editValue.id !== undefined) {
-            // Update existing log
             await updateLog(editValue.id, {
               value: editValue.value,
               attempted: editValue.attempted,
-              completed: editValue.completed
+              completed: editValue.completed,
+              timestamp: targetNoon
             });
           } else {
-            // Create new log entry
             const newLogId = await saveLog({
               exerciseId,
               value: editValue.value,
@@ -283,30 +399,32 @@ export function SessionDetail() {
               completed: editValue.completed,
               sessionId: parsedDate.sessionId
             });
-            // Update the timestamp to match the session date
-            await updateLog(newLogId, {
-              timestamp: sessionTimestamp
-            });
+            await updateLog(newLogId, { timestamp: targetNoon });
           }
         } else if (editValue.id !== undefined) {
-          // If attempted is false but there's an existing log, delete it
           await deleteLog(editValue.id);
         }
       }
-      
-      // Reload data
-      const allLogs = await getAllLogs();
-      const filteredLogs = allLogs.filter(log => 
-        log.sessionId === parsedDate.sessionId &&
-        (log.attempted ?? true) === true &&
-        isSameDate(log.timestamp, parsedDate.year, parsedDate.month, parsedDate.day)
-      );
-      setSessionLogs(filteredLogs);
-      
+
+      if (sessionKey !== newCompositeKey) {
+        navigate(`/sessions/${newCompositeKey}`, { replace: true });
+      } else {
+        const allLogs = await getAllLogs();
+        const filteredLogs = allLogs.filter(
+          (log) =>
+            log.sessionId === parsedDate.sessionId &&
+            (log.attempted ?? true) === true &&
+            isSameDate(log.timestamp, ny, nm, nd)
+        );
+        setSessionLogs(filteredLogs);
+      }
+
       setIsEditMode(false);
     } catch (err) {
       console.error('Failed to save edits:', err);
-      setError('Failed to save changes. Please try again.');
+      setError(
+        err instanceof Error ? err.message : 'Failed to save changes. Please try again.'
+      );
     } finally {
       setIsSaving(false);
     }
@@ -315,21 +433,27 @@ export function SessionDetail() {
   const handleDeleteLog = async (logId: number, exerciseId: string) => {
     try {
       await deleteLog(logId);
-      // Remove from edit values
       const newEditValues = { ...editValues };
       delete newEditValues[exerciseId];
       setEditValues(newEditValues);
-      
-      // Reload data
-      const parsed = parseSessionKey(sessionKey!);
-      if (parsed) {
-        const allLogs = await getAllLogs();
-        const filteredLogs = allLogs.filter(log => 
-          log.sessionId === parsed.sessionId &&
-          (log.attempted ?? true) === true &&
-          isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
-        );
+
+      if (!sessionKey) return;
+
+      if (isSessionInstanceIdParam(sessionKey)) {
+        const filteredLogs = await getWorkoutLogsBySessionInstanceId(sessionKey);
         setSessionLogs(filteredLogs);
+      } else {
+        const parsed = parseSessionKey(sessionKey);
+        if (parsed) {
+          const allLogs = await getAllLogs();
+          const filteredLogs = allLogs.filter(
+            (log) =>
+              log.sessionId === parsed.sessionId &&
+              (log.attempted ?? true) === true &&
+              isSameDate(log.timestamp, parsed.year, parsed.month, parsed.day)
+          );
+          setSessionLogs(filteredLogs);
+        }
       }
     } catch (err) {
       console.error('Failed to delete log:', err);
@@ -337,11 +461,14 @@ export function SessionDetail() {
     }
   };
 
-  const updateEditValue = (exerciseId: string, field: 'value' | 'attempted' | 'completed', newValue: number | boolean) => {
-    setEditValues(prev => {
+  const updateEditValue = (
+    exerciseId: string,
+    field: 'value' | 'attempted' | 'completed',
+    newValue: number | boolean
+  ) => {
+    setEditValues((prev) => {
       const current = prev[exerciseId];
       if (!current) return prev;
-      
       return {
         ...prev,
         [exerciseId]: {
@@ -368,24 +495,30 @@ export function SessionDetail() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center max-w-md">
           <p className="text-destructive mb-4">{error || 'Session not found'}</p>
-          <Button onClick={() => navigate('/')}>
-            Back to Home
-          </Button>
+          <Button onClick={() => navigate('/')}>Back to Home</Button>
         </div>
       </div>
     );
   }
 
   const isCardio = session.id === 'running' || session.id === 'floorball';
-  const cardioLog = isCardio ? sessionLogs.find(log => log.type === 'cardio') : null;
+  const cardioLog = isCardio ? sessionLogs.find((log) => log.type === 'cardio') : null;
   const colors = getSessionColor(session.id);
-  const sessionDate = sessionLogs.length > 0 
-    ? sessionLogs[0].timestamp 
-    : Date.now();
+  const sessionDate =
+    loggedSessionRecord != null
+      ? loggedSessionRecord.occurredAt
+      : sessionLogs.length > 0
+        ? sessionLogs[0].timestamp
+        : Date.now();
 
-  // Create a map of exerciseId to logged value
-  const exerciseLogMap = new Map<string, { value: number; attempted: boolean; completed: boolean; id: number }>();
-  sessionLogs.forEach(log => {
+  const showEdit =
+    (!isCardio && sessionLogs.length > 0) || (isCardio && loggedSessionRecord != null && cardioLog);
+
+  const exerciseLogMap = new Map<
+    string,
+    { value: number; attempted: boolean; completed: boolean; id: number }
+  >();
+  sessionLogs.forEach((log) => {
     if (!isCardio || log.type !== 'cardio') {
       exerciseLogMap.set(log.exerciseId, {
         value: log.value,
@@ -401,9 +534,7 @@ export function SessionDetail() {
       <div className="max-w-md mx-auto">
         <PageHeader title="Session Details" />
 
-        {/* Content */}
         <div className="pt-4">
-          {/* Session Header */}
           <Card className={`mb-4 ${colors.border} ${colors.bg}`}>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -411,7 +542,7 @@ export function SessionDetail() {
                   <CardTitle className="text-xl">{session.name}</CardTitle>
                   <CardDescription>{formatSessionDate(sessionDate)}</CardDescription>
                 </div>
-                {!isCardio && sessionLogs.length > 0 && (
+                {showEdit && (
                   <div>
                     {!isEditMode ? (
                       <Button variant="outline" size="sm" onClick={handleEditClick}>
@@ -433,6 +564,20 @@ export function SessionDetail() {
                   </div>
                 )}
               </div>
+              {isEditMode && (
+                <div className="mt-3 space-y-1">
+                  <Label htmlFor="session-date" className="text-xs">
+                    Session date
+                  </Label>
+                  <Input
+                    id="session-date"
+                    type="date"
+                    value={editDateStr}
+                    onChange={(e) => setEditDateStr(e.target.value)}
+                    className="h-9 max-w-[200px]"
+                  />
+                </div>
+              )}
             </CardHeader>
           </Card>
 
@@ -444,7 +589,6 @@ export function SessionDetail() {
             </Card>
           )}
 
-          {/* Cardio Session */}
           {isCardio && cardioLog && (
             <Card className="mb-4">
               <CardHeader>
@@ -474,7 +618,6 @@ export function SessionDetail() {
             </Card>
           )}
 
-          {/* Regular Session - Exercises */}
           {!isCardio && (
             <div className="space-y-4">
               {session.blocks.map((block, blockIndex) => {
@@ -495,7 +638,7 @@ export function SessionDetail() {
                           const editValue = isEditMode ? editValues[exercise.id] : null;
                           const isTimeBased = exercise.target.type === 'time';
                           const unit = isTimeBased ? 's' : ' kg';
-                          
+
                           return (
                             <div
                               key={exercise.id}
@@ -505,15 +648,14 @@ export function SessionDetail() {
                                 <div className="flex-1">
                                   <div className="font-medium text-sm">{exercise.name}</div>
                                   <div className="text-xs text-muted-foreground mt-0.5">
-                                    {exercise.sets} sets × {
-                                      exercise.target.type === 'reps' 
-                                        ? `${exercise.target.reps} reps`
-                                        : exercise.target.type === 'time'
+                                    {exercise.sets} sets ×{' '}
+                                    {exercise.target.type === 'reps'
+                                      ? `${exercise.target.reps} reps`
+                                      : exercise.target.type === 'time'
                                         ? `${exercise.target.seconds}s`
                                         : exercise.target.type === 'range'
-                                        ? `${exercise.target.min}-${exercise.target.max} reps`
-                                        : 'AMRAP'
-                                    }
+                                          ? `${exercise.target.min}-${exercise.target.max} reps`
+                                          : 'AMRAP'}
                                   </div>
                                 </div>
                                 {log && !isEditMode && (
@@ -551,9 +693,11 @@ export function SessionDetail() {
                                     <Input
                                       id={`edit-value-${exercise.id}`}
                                       type="number"
-                                      step={isTimeBased ? "1" : "0.5"}
+                                      step={isTimeBased ? '1' : '0.5'}
                                       value={editValue.value}
-                                      onChange={(e) => updateEditValue(exercise.id, 'value', parseFloat(e.target.value) || 0)}
+                                      onChange={(e) =>
+                                        updateEditValue(exercise.id, 'value', parseFloat(e.target.value) || 0)
+                                      }
                                       className="h-8"
                                     />
                                   </div>
@@ -561,7 +705,9 @@ export function SessionDetail() {
                                     <Checkbox
                                       id={`edit-attempted-${exercise.id}`}
                                       checked={editValue.attempted}
-                                      onCheckedChange={(checked) => updateEditValue(exercise.id, 'attempted', checked === true)}
+                                      onCheckedChange={(checked) =>
+                                        updateEditValue(exercise.id, 'attempted', checked === true)
+                                      }
                                     />
                                     <Label htmlFor={`edit-attempted-${exercise.id}`} className="text-xs cursor-pointer">
                                       Attempted
@@ -571,7 +717,9 @@ export function SessionDetail() {
                                     <Checkbox
                                       id={`edit-completed-${exercise.id}`}
                                       checked={editValue.completed}
-                                      onCheckedChange={(checked) => updateEditValue(exercise.id, 'completed', checked === true)}
+                                      onCheckedChange={(checked) =>
+                                        updateEditValue(exercise.id, 'completed', checked === true)
+                                      }
                                     />
                                     <Label htmlFor={`edit-completed-${exercise.id}`} className="text-xs cursor-pointer">
                                       Completed all reps
@@ -588,9 +736,7 @@ export function SessionDetail() {
                                   </div>
                                 </div>
                               ) : (
-                                <div className="mt-2 text-xs text-muted-foreground italic">
-                                  Not attempted
-                                </div>
+                                <div className="mt-2 text-xs text-muted-foreground italic">Not attempted</div>
                               )}
                             </div>
                           );
@@ -603,7 +749,6 @@ export function SessionDetail() {
             </div>
           )}
 
-          {/* Empty State */}
           {!isCardio && sessionLogs.length === 0 && (
             <Card>
               <CardContent className="pt-6">

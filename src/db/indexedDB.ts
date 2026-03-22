@@ -1,9 +1,10 @@
 import type { SessionV2 } from '../schema/sessionSchema';
 import { SessionSchemaV2 } from '../schema/sessionSchema';
 import { sessions as defaultSessions } from '../config/sessions';
+import { backfillLoggedSessionsFromLogs } from '../lib/loggedSessionMigration';
 
 const DB_NAME = 'GymWorkoutDB';
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 
 const EXERCISES_STORE = 'exercises';
 const WORKOUT_LOGS_STORE = 'workoutLogs';
@@ -11,6 +12,7 @@ const BODY_WEIGHT_STORE = 'bodyWeight';
 const PROFILE_STORE = 'profile';
 const COACH_FEEDBACK_STORE = 'coachFeedback';
 const SESSIONS_STORE = 'sessions';
+const LOGGED_SESSIONS_STORE = 'loggedSessions';
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -27,9 +29,17 @@ export interface WorkoutLogEntry {
   completed: boolean; // indicates if all reps were achieved
   timestamp: number;
   sessionId: string;
+  /** Stable id for one completed workout (links to LoggedSession) */
+  sessionInstanceId?: string;
   type?: 'cardio';
   time?: number; // Time in seconds
   pace?: number; // Pace per km in minutes (only for running)
+}
+
+export interface LoggedSession {
+  id: string;
+  templateSessionId: string;
+  occurredAt: number;
 }
 
 export interface BodyWeightEntry {
@@ -176,6 +186,20 @@ export function initDB(): Promise<IDBDatabase> {
           }
         };
       }
+
+      // Version 9: logged sessions + sessionInstanceId index on workout logs
+      if (oldVersion < 9) {
+        if (!db.objectStoreNames.contains(LOGGED_SESSIONS_STORE)) {
+          db.createObjectStore(LOGGED_SESSIONS_STORE, { keyPath: 'id' });
+        }
+        if (db.objectStoreNames.contains(WORKOUT_LOGS_STORE)) {
+          const transaction = (event.target as IDBOpenDBRequest).transaction!;
+          const logStore = transaction.objectStore(WORKOUT_LOGS_STORE);
+          if (!logStore.indexNames.contains('sessionInstanceId')) {
+            logStore.createIndex('sessionInstanceId', 'sessionInstanceId', { unique: false });
+          }
+        }
+      }
     };
   });
 }
@@ -234,18 +258,56 @@ export async function saveWorkoutLog(entry: Omit<WorkoutLogEntry, 'id' | 'timest
  * @param {IDBObjectStore} store - IndexedDB object store (must be from active transaction)
  * @returns {Promise<number>} - Returns the entry ID (existing or new)
  */
+function newSessionInstanceId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `ls-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 async function saveOrUpdateWorkoutLogInTransaction(
   entry: Omit<WorkoutLogEntry, 'id' | 'timestamp'>,
   store: IDBObjectStore
 ): Promise<number> {
+  if (entry.sessionInstanceId) {
+    return new Promise((resolve, reject) => {
+      const index = store.index('sessionInstanceId');
+      const request = index.openCursor(IDBKeyRange.only(entry.sessionInstanceId));
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+        if (cursor) {
+          const log = cursor.value as WorkoutLogEntry;
+          if (log.exerciseId === entry.exerciseId && log.id !== undefined) {
+            const updatedEntry: WorkoutLogEntry = {
+              ...log,
+              ...entry,
+              timestamp: log.timestamp
+            };
+            const updateRequest = store.put(updatedEntry);
+            updateRequest.onsuccess = () => resolve(log.id!);
+            updateRequest.onerror = () => reject(new Error('Failed to update workout log'));
+            return;
+          }
+          cursor.continue();
+        } else {
+          const logEntry: WorkoutLogEntry = {
+            ...entry,
+            timestamp: Date.now()
+          };
+          const addRequest = store.add(logEntry);
+          addRequest.onsuccess = () => resolve(addRequest.result as number);
+          addRequest.onerror = () => reject(new Error('Failed to save workout log'));
+        }
+      };
+
+      request.onerror = () => reject(new Error('Failed to query workout logs'));
+    });
+  }
+
   return new Promise((resolve, reject) => {
-    // Get today's date boundaries
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStart = today.getTime();
-    const todayEnd = todayStart + (24 * 60 * 60 * 1000);
+    const todayEnd = todayStart + 24 * 60 * 60 * 1000;
 
-    // Query existing entries for this exercise today
     const index = store.index('exerciseId');
     const request = index.openCursor(IDBKeyRange.only(entry.exerciseId));
 
@@ -255,29 +317,26 @@ async function saveOrUpdateWorkoutLogInTransaction(
       const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
       if (cursor) {
         const log = cursor.value as WorkoutLogEntry;
-        // Check if this entry matches sessionId and is from today
         if (
           log.sessionId === entry.sessionId &&
           log.timestamp >= todayStart &&
           log.timestamp < todayEnd
         ) {
           existingEntry = log;
-          // Found match - update it and stop searching
           if (existingEntry.id !== undefined) {
             const updatedEntry: WorkoutLogEntry = {
               ...existingEntry,
               ...entry,
-              timestamp: existingEntry.timestamp // Preserve original timestamp
+              timestamp: existingEntry.timestamp
             };
             const updateRequest = store.put(updatedEntry);
             updateRequest.onsuccess = () => resolve(existingEntry!.id!);
             updateRequest.onerror = () => reject(new Error('Failed to update workout log'));
           }
-          return; // Stop cursor iteration
+          return;
         }
         cursor.continue();
       } else {
-        // Cursor exhausted - no match found, create new entry
         if (!existingEntry) {
           const logEntry: WorkoutLogEntry = {
             ...entry,
@@ -296,47 +355,57 @@ async function saveOrUpdateWorkoutLogInTransaction(
 
 /**
  * Save multiple workout log entries atomically in a single transaction
- * @param {Array} entries - Array of workout log entries to save
- * @returns {Promise<void>} - Resolves when all entries are saved, rejects if any fail
+ * Creates one LoggedSession row and links all logs with the same sessionInstanceId.
  */
 export async function saveSessionEntries(entries: Array<Omit<WorkoutLogEntry, 'id' | 'timestamp'>>): Promise<void> {
+  if (entries.length === 0) {
+    return;
+  }
+
+  const templateSessionId = entries[0].sessionId;
+  const sessionInstanceId = newSessionInstanceId();
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  const occurredAt = d.getTime();
+  const loggedSession: LoggedSession = {
+    id: sessionInstanceId,
+    templateSessionId,
+    occurredAt
+  };
+
+  const withInstance = entries.map((e) => ({ ...e, sessionInstanceId }));
+
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readwrite');
-    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
-    
-    let completed = 0;
     let hasError = false;
+    const transaction = db.transaction([LOGGED_SESSIONS_STORE, WORKOUT_LOGS_STORE], 'readwrite');
+    const lsStore = transaction.objectStore(LOGGED_SESSIONS_STORE);
+    const logStore = transaction.objectStore(WORKOUT_LOGS_STORE);
 
-    // Save all entries using the same transaction
-    entries.forEach((entry) => {
-      saveOrUpdateWorkoutLogInTransaction(entry, store)
-        .then(() => {
-          completed++;
-          if (completed === entries.length && !hasError) {
-            resolve();
-          }
-        })
-        .catch((err) => {
-          if (!hasError) {
-            hasError = true;
-            reject(err);
-          }
-        });
-    });
-
-    // If no entries, resolve immediately
-    if (entries.length === 0) {
-      resolve();
-    }
-
-    // Transaction error handler
-    transaction.onerror = () => {
+    transaction.oncomplete = () => {
       if (!hasError) {
-        hasError = true;
-        reject(new Error('Transaction failed'));
+        resolve();
       }
     };
+    transaction.onerror = () => {
+      hasError = true;
+      reject(transaction.error ?? new Error('Transaction failed'));
+    };
+
+    const putReq = lsStore.put(loggedSession);
+    putReq.onerror = () => {
+      hasError = true;
+      reject(new Error('Failed to save logged session'));
+    };
+
+    withInstance.forEach((entry) => {
+      saveOrUpdateWorkoutLogInTransaction(entry, logStore).catch((err) => {
+        if (!hasError) {
+          hasError = true;
+          reject(err);
+        }
+      });
+    });
   });
 }
 
@@ -514,6 +583,129 @@ export async function deleteWorkoutLog(id: number): Promise<void> {
 }
 
 /**
+ * Backfill LoggedSession rows and sessionInstanceId on legacy workout logs (idempotent).
+ */
+export async function runLoggedSessionsBackfill(): Promise<void> {
+  const logs = await getAllWorkoutLogs();
+  const { loggedSessions, assignments } = backfillLoggedSessionsFromLogs(logs, newSessionInstanceId);
+  if (loggedSessions.length === 0) {
+    return;
+  }
+
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([LOGGED_SESSIONS_STORE, WORKOUT_LOGS_STORE], 'readwrite');
+    const lsStore = transaction.objectStore(LOGGED_SESSIONS_STORE);
+    const logStore = transaction.objectStore(WORKOUT_LOGS_STORE);
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error('Logged session migration failed'));
+
+    for (const ls of loggedSessions) {
+      lsStore.put(ls);
+    }
+
+    for (const [logId, instanceId] of assignments) {
+      const getReq = logStore.get(logId);
+      getReq.onsuccess = () => {
+        const log = getReq.result as WorkoutLogEntry | undefined;
+        if (log && log.sessionInstanceId == null) {
+          logStore.put({ ...log, sessionInstanceId: instanceId });
+        }
+      };
+    }
+  });
+}
+
+export async function getLoggedSession(id: string): Promise<LoggedSession | null> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([LOGGED_SESSIONS_STORE], 'readonly');
+    const store = transaction.objectStore(LOGGED_SESSIONS_STORE);
+    const request = store.get(id);
+    request.onsuccess = () => resolve((request.result as LoggedSession | undefined) ?? null);
+    request.onerror = () => reject(new Error('Failed to get logged session'));
+  });
+}
+
+export async function getAllLoggedSessions(): Promise<LoggedSession[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([LOGGED_SESSIONS_STORE], 'readonly');
+    const store = transaction.objectStore(LOGGED_SESSIONS_STORE);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result as LoggedSession[]);
+    request.onerror = () => reject(new Error('Failed to get logged sessions'));
+  });
+}
+
+export async function getWorkoutLogsBySessionInstanceId(sessionInstanceId: string): Promise<WorkoutLogEntry[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([WORKOUT_LOGS_STORE], 'readonly');
+    const store = transaction.objectStore(WORKOUT_LOGS_STORE);
+    const index = store.index('sessionInstanceId');
+    const request = index.getAll(sessionInstanceId);
+    request.onsuccess = () => {
+      const logs = (request.result as WorkoutLogEntry[]).sort((a, b) => b.timestamp - a.timestamp);
+      resolve(logs);
+    };
+    request.onerror = () => reject(new Error('Failed to get logs for session'));
+  });
+}
+
+/**
+ * Update occurredAt and normalize all log timestamps to that local noon (session day edit).
+ */
+export async function updateLoggedSessionDate(sessionInstanceId: string, newOccurredAtNoon: number): Promise<void> {
+  const all = await getAllLoggedSessions();
+  const current = all.find((ls) => ls.id === sessionInstanceId);
+  if (!current) {
+    throw new Error('Session not found');
+  }
+
+  for (const ls of all) {
+    if (ls.id === sessionInstanceId) continue;
+    if (ls.templateSessionId !== current.templateSessionId) continue;
+    const a = new Date(ls.occurredAt);
+    const b = new Date(newOccurredAtNoon);
+    if (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    ) {
+      throw new Error('You already have this session recorded on that date.');
+    }
+  }
+
+  const logs = await getWorkoutLogsBySessionInstanceId(sessionInstanceId);
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([LOGGED_SESSIONS_STORE, WORKOUT_LOGS_STORE], 'readwrite');
+    const lsStore = transaction.objectStore(LOGGED_SESSIONS_STORE);
+    const logStore = transaction.objectStore(WORKOUT_LOGS_STORE);
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error('Failed to update session date'));
+
+    const getLs = lsStore.get(sessionInstanceId);
+    getLs.onsuccess = () => {
+      const ls = getLs.result as LoggedSession | undefined;
+      if (!ls) {
+        reject(new Error('Session not found'));
+        return;
+      }
+      lsStore.put({ ...ls, occurredAt: newOccurredAtNoon });
+      for (const log of logs) {
+        if (log.id === undefined) continue;
+        logStore.put({ ...log, timestamp: newOccurredAtNoon });
+      }
+    };
+    getLs.onerror = () => reject(new Error('Failed to read session'));
+  });
+}
+
+/**
  * Get all exercises from the database
  * @returns {Promise<Array>} - Array of all exercises
  */
@@ -599,6 +791,8 @@ export interface BackupData {
   exercises: Exercise[];
   workoutLogs: WorkoutLogEntry[];
   sessions?: SessionV2[];
+  /** Present in backups from DB v9+ */
+  loggedSessions?: LoggedSession[];
   /** Present in backups from v1.1.0+ */
   bodyWeights?: BodyWeightEntry[];
   userProfile?: UserProfile | null;
@@ -610,21 +804,24 @@ export interface BackupData {
  * @returns {Promise<BackupData>} - Backup data object with all app data stores
  */
 export async function exportBackup(): Promise<BackupData> {
-  const [exercises, workoutLogs, sessions, bodyWeights, userProfile, coachFeedback] = await Promise.all([
-    getAllExercises(),
-    getAllWorkoutLogs(),
-    getAllSessions(),
-    getAllBodyWeights(),
-    getUserProfile(),
-    getAllCoachFeedback()
-  ]);
+  const [exercises, workoutLogs, sessions, bodyWeights, userProfile, coachFeedback, loggedSessions] =
+    await Promise.all([
+      getAllExercises(),
+      getAllWorkoutLogs(),
+      getAllSessions(),
+      getAllBodyWeights(),
+      getUserProfile(),
+      getAllCoachFeedback(),
+      getAllLoggedSessions()
+    ]);
 
   return {
-    version: '1.1.0',
+    version: '1.2.0',
     exportDate: Date.now(),
     exercises,
     workoutLogs,
     sessions,
+    loggedSessions,
     bodyWeights,
     userProfile,
     coachFeedback
@@ -690,6 +887,20 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
         console.error(`Failed to import exercise ${exercise.id}:`, err);
         // Continue with other exercises
       }
+    }
+
+    // Import logged sessions (before workout logs; optional for old backups)
+    if (backupData.loggedSessions && Array.isArray(backupData.loggedSessions) && backupData.loggedSessions.length > 0) {
+      const dbLs = await initDB();
+      await new Promise<void>((resolve, reject) => {
+        const transaction = dbLs.transaction([LOGGED_SESSIONS_STORE], 'readwrite');
+        const store = transaction.objectStore(LOGGED_SESSIONS_STORE);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(new Error('Failed to import logged sessions'));
+        for (const ls of backupData.loggedSessions!) {
+          store.put(ls);
+        }
+      });
     }
 
     // Import workout logs with preserved timestamps
@@ -778,6 +989,10 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
       }
     }
 
+    await runLoggedSessionsBackfill().catch((err) =>
+      console.error('Post-import logged session backfill:', err)
+    );
+
     return {
       success: true,
       exercisesImported,
@@ -830,7 +1045,7 @@ export async function saveBodyWeight(weight: number): Promise<number> {
 
     const request = store.add(entry);
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve(request.result as number);
     request.onerror = () => reject(new Error('Failed to save body weight'));
   });
 }
@@ -925,7 +1140,7 @@ export async function saveCoachFeedback(feedback: string): Promise<number> {
 
     const request = store.add(entry);
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => resolve(request.result as number);
     request.onerror = () => reject(new Error('Failed to save coach feedback'));
   });
 }
@@ -978,17 +1193,19 @@ export async function exportAICoachData(): Promise<import('../lib/aiCoachExport'
   // Use dynamic import to avoid circular dependencies
   const aiCoachExport = await import('../lib/aiCoachExport');
 
-  const [exercises, workoutLogs, bodyWeights, userProfile, coachFeedback, sessions] = await Promise.all([
-    getAllExercises(),
-    getAllWorkoutLogs(),
-    getAllBodyWeights(),
-    getUserProfile(),
-    getAllCoachFeedback(),
-    getAllSessions()
-  ]);
+  const [exercises, workoutLogs, bodyWeights, userProfile, coachFeedback, sessions, loggedSessions] =
+    await Promise.all([
+      getAllExercises(),
+      getAllWorkoutLogs(),
+      getAllBodyWeights(),
+      getUserProfile(),
+      getAllCoachFeedback(),
+      getAllSessions(),
+      getAllLoggedSessions()
+    ]);
 
   // Transform data
-  const workoutSessions = aiCoachExport.groupWorkoutSessions(workoutLogs, exercises, sessions);
+  const workoutSessions = aiCoachExport.groupWorkoutSessions(workoutLogs, exercises, sessions, loggedSessions);
   const exerciseProgressions = aiCoachExport.createExerciseProgressions(workoutLogs);
   const bodyWeightLog = aiCoachExport.formatBodyWeightLog(bodyWeights);
   const statistics = aiCoachExport.calculateStatistics(workoutLogs, workoutSessions);
