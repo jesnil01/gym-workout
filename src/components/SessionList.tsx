@@ -74,6 +74,7 @@ export function SessionList() {
       // Success - reset form and close modal
       setWeightValue('');
       setWeightDialogOpen(false);
+      setRefreshKey(prev => prev + 1);
     } catch (err) {
       setWeightError(err instanceof Error ? err.message : 'Failed to save weight');
     } finally {
