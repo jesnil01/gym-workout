@@ -70,6 +70,15 @@ export function VersionDisplay() {
         if (result.sessionsImported != null && result.sessionsImported > 0) {
           parts.push(`${result.sessionsImported} sessions`);
         }
+        if (result.bodyWeightsImported != null && result.bodyWeightsImported > 0) {
+          parts.push(`${result.bodyWeightsImported} body weight entries`);
+        }
+        if (result.profileRestored) {
+          parts.push('profile');
+        }
+        if (result.coachFeedbackImported != null && result.coachFeedbackImported > 0) {
+          parts.push(`${result.coachFeedbackImported} coach feedback entries`);
+        }
         setImportMessage(`Imported ${parts.join(', ')}`);
         // Refresh page after a short delay to show updated data
         setTimeout(() => {

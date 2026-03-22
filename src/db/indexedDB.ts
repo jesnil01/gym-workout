@@ -599,25 +599,35 @@ export interface BackupData {
   exercises: Exercise[];
   workoutLogs: WorkoutLogEntry[];
   sessions?: SessionV2[];
+  /** Present in backups from v1.1.0+ */
+  bodyWeights?: BodyWeightEntry[];
+  userProfile?: UserProfile | null;
+  coachFeedback?: CoachFeedbackEntry[];
 }
 
 /**
  * Export all database data as a backup object
- * @returns {Promise<BackupData>} - Backup data object with all exercises and workout logs
+ * @returns {Promise<BackupData>} - Backup data object with all app data stores
  */
 export async function exportBackup(): Promise<BackupData> {
-  const [exercises, workoutLogs, sessions] = await Promise.all([
+  const [exercises, workoutLogs, sessions, bodyWeights, userProfile, coachFeedback] = await Promise.all([
     getAllExercises(),
     getAllWorkoutLogs(),
-    getAllSessions()
+    getAllSessions(),
+    getAllBodyWeights(),
+    getUserProfile(),
+    getAllCoachFeedback()
   ]);
 
   return {
-    version: '1.0.0',
+    version: '1.1.0',
     exportDate: Date.now(),
     exercises,
     workoutLogs,
-    sessions
+    sessions,
+    bodyWeights,
+    userProfile,
+    coachFeedback
   };
 }
 
@@ -626,6 +636,9 @@ export interface ImportResult {
   exercisesImported: number;
   workoutLogsImported: number;
   sessionsImported?: number;
+  bodyWeightsImported?: number;
+  coachFeedbackImported?: number;
+  profileRestored?: boolean;
   error?: string;
 }
 
@@ -644,6 +657,9 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
     let exercisesImported = 0;
     let workoutLogsImported = 0;
     let sessionsImported = 0;
+    let bodyWeightsImported = 0;
+    let coachFeedbackImported = 0;
+    let profileRestored = false;
 
     // Import sessions (if present in backup - optional for backward compatibility)
     if (backupData.sessions && Array.isArray(backupData.sessions) && backupData.sessions.length > 0) {
@@ -702,11 +718,74 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
       }
     }
 
+    // Import body weights (optional; v1.1.0+ backups)
+    if (backupData.bodyWeights && Array.isArray(backupData.bodyWeights) && backupData.bodyWeights.length > 0) {
+      const dbBw = await initDB();
+      for (const bw of backupData.bodyWeights) {
+        try {
+          if (typeof bw.weight !== 'number' || typeof bw.timestamp !== 'number') continue;
+          if (bw.weight <= 0 || (bw.weight * 10) % 1 !== 0) continue;
+          await new Promise<void>((resolve, reject) => {
+            const transaction = dbBw.transaction([BODY_WEIGHT_STORE], 'readwrite');
+            const store = transaction.objectStore(BODY_WEIGHT_STORE);
+            const entry: BodyWeightEntry = { weight: bw.weight, timestamp: bw.timestamp };
+            const request = store.add(entry);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(new Error('Failed to import body weight entry'));
+          });
+          bodyWeightsImported++;
+        } catch (err) {
+          console.error('Failed to import body weight entry:', err);
+        }
+      }
+    }
+
+    // Import user profile (optional; v1.1.0+ backups)
+    if (backupData.userProfile != null && typeof backupData.userProfile === 'object') {
+      const p = backupData.userProfile;
+      try {
+        await saveUserProfile({
+          id: 'user',
+          goal: typeof p.goal === 'string' ? p.goal : '',
+          facts: typeof p.facts === 'string' ? p.facts : ''
+        });
+        profileRestored = true;
+      } catch (err) {
+        console.error('Failed to import user profile:', err);
+      }
+    }
+
+    // Import coach feedback (optional; v1.1.0+ backups)
+    if (backupData.coachFeedback && Array.isArray(backupData.coachFeedback) && backupData.coachFeedback.length > 0) {
+      const dbCf = await initDB();
+      for (const cf of backupData.coachFeedback) {
+        try {
+          const feedback =
+            typeof cf.feedback === 'string' ? cf.feedback.trim() : '';
+          if (!feedback || typeof cf.timestamp !== 'number') continue;
+          await new Promise<void>((resolve, reject) => {
+            const transaction = dbCf.transaction([COACH_FEEDBACK_STORE], 'readwrite');
+            const store = transaction.objectStore(COACH_FEEDBACK_STORE);
+            const entry: CoachFeedbackEntry = { feedback, timestamp: cf.timestamp };
+            const request = store.add(entry);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(new Error('Failed to import coach feedback'));
+          });
+          coachFeedbackImported++;
+        } catch (err) {
+          console.error('Failed to import coach feedback:', err);
+        }
+      }
+    }
+
     return {
       success: true,
       exercisesImported,
       workoutLogsImported,
-      sessionsImported
+      sessionsImported,
+      bodyWeightsImported,
+      coachFeedbackImported,
+      profileRestored
     };
   } catch (err) {
     return {
@@ -714,6 +793,9 @@ export async function importBackup(backupData: BackupData): Promise<ImportResult
       exercisesImported: 0,
       workoutLogsImported: 0,
       sessionsImported: 0,
+      bodyWeightsImported: 0,
+      coachFeedbackImported: 0,
+      profileRestored: false,
       error: err instanceof Error ? err.message : 'Failed to import backup'
     };
   }
