@@ -12,6 +12,7 @@ import { BackupNotification } from './BackupNotification';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useIndexedDB } from '../hooks/useIndexedDB';
+import { parsePaceMmSs } from '../lib/utils';
 import { User, LayoutTemplate } from 'lucide-react';
 import {
   Dialog,
@@ -90,7 +91,7 @@ export function SessionList() {
       const hours = parseInt(runningHours) || 0;
       const minutes = parseInt(runningMinutes) || 0;
       const seconds = parseInt(runningSeconds) || 0;
-      const pace = parseFloat(runningPace);
+      const pace = parsePaceMmSs(runningPace);
 
       // Check if at least one time field is > 0
       if (hours === 0 && minutes === 0 && seconds === 0) {
@@ -98,9 +99,8 @@ export function SessionList() {
         return;
       }
 
-      // Validate pace
-      if (isNaN(pace) || pace <= 0) {
-        setCardioError('Please enter a valid pace (minutes per km)');
+      if (pace === null) {
+        setCardioError('Please enter a valid pace (e.g. 5:10 for 5:10 per km)');
         return;
       }
 
@@ -352,14 +352,13 @@ export function SessionList() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="pace-input">Pace (minutes per km)</Label>
+                    <Label htmlFor="pace-input">Pace (min:sec per km)</Label>
                     <Input
                       id="pace-input"
-                      type="number"
-                      step="0.1"
-                      inputMode="decimal"
-                      min="0"
-                      placeholder="5.5"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="5:10"
                       value={runningPace}
                       onChange={(e) => {
                         setRunningPace(e.target.value);
@@ -368,7 +367,7 @@ export function SessionList() {
                       className="text-lg h-12"
                       disabled={isSavingCardio}
                     />
-                    <p className="text-xs text-muted-foreground">e.g., 5.5 for 5:30/km</p>
+                    <p className="text-xs text-muted-foreground">e.g. 5:10 for five minutes ten seconds per km</p>
                   </div>
                 </div>
               )}

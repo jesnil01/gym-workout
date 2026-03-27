@@ -39,6 +39,30 @@ export function formatPace(paceMinutes: number): string {
 }
 
 /**
+ * Parse pace from "M:SS" text (minutes and seconds per km) to decimal minutes per km.
+ * @returns null if empty, malformed, or non-positive pace
+ */
+export function parsePaceMmSs(input: string): number | null {
+  const trimmed = input.trim();
+  if (trimmed === '') return null;
+
+  const parts = trimmed.split(':');
+  if (parts.length !== 2) return null;
+
+  const [minStr, secStr] = parts;
+  if (!/^\d+$/.test(minStr) || !/^\d+$/.test(secStr)) return null;
+
+  const minutes = parseInt(minStr, 10);
+  const seconds = parseInt(secStr, 10);
+  if (seconds > 59) return null;
+
+  const paceMinutes = minutes + seconds / 60;
+  if (paceMinutes <= 0) return null;
+
+  return paceMinutes;
+}
+
+/**
  * Start of current week (Monday 00:00:00) in local time, as timestamp.
  */
 export function getMondayOfThisWeek(): number {
