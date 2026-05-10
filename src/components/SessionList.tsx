@@ -12,7 +12,6 @@ import { BackupNotification } from './BackupNotification';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useIndexedDB } from '../hooks/useIndexedDB';
-import { parsePaceMmSs } from '../lib/utils';
 import { User, LayoutTemplate } from 'lucide-react';
 import {
   Dialog,
@@ -36,7 +35,8 @@ export function SessionList() {
   const [runningHours, setRunningHours] = useState('');
   const [runningMinutes, setRunningMinutes] = useState('');
   const [runningSeconds, setRunningSeconds] = useState('');
-  const [runningPace, setRunningPace] = useState('');
+  const [runningPaceMinutes, setRunningPaceMinutes] = useState('');
+  const [runningPaceSeconds, setRunningPaceSeconds] = useState('');
   const [isSavingCardio, setIsSavingCardio] = useState(false);
   const [cardioError, setCardioError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -91,7 +91,8 @@ export function SessionList() {
       const hours = parseInt(runningHours) || 0;
       const minutes = parseInt(runningMinutes) || 0;
       const seconds = parseInt(runningSeconds) || 0;
-      const pace = parsePaceMmSs(runningPace);
+      const paceMin = parseInt(runningPaceMinutes) || 0;
+      const paceSec = parseInt(runningPaceSeconds) || 0;
 
       // Check if at least one time field is > 0
       if (hours === 0 && minutes === 0 && seconds === 0) {
@@ -99,8 +100,14 @@ export function SessionList() {
         return;
       }
 
-      if (pace === null) {
-        setCardioError('Please enter a valid pace (e.g. 5:10 for 5:10 per km)');
+      if (paceSec < 0 || paceSec > 59) {
+        setCardioError('Pace seconds must be between 0 and 59');
+        return;
+      }
+
+      const pace = paceMin + paceSec / 60;
+      if (pace <= 0) {
+        setCardioError('Please enter a valid pace');
         return;
       }
 
@@ -124,7 +131,8 @@ export function SessionList() {
         setRunningHours('');
         setRunningMinutes('');
         setRunningSeconds('');
-        setRunningPace('');
+        setRunningPaceMinutes('');
+        setRunningPaceSeconds('');
         setCardioDialogOpen(false);
         setRefreshKey(prev => prev + 1);
       } catch (err) {
@@ -245,7 +253,8 @@ export function SessionList() {
             setRunningHours('');
             setRunningMinutes('');
             setRunningSeconds('');
-            setRunningPace('');
+            setRunningPaceMinutes('');
+            setRunningPaceSeconds('');
             setCardioError(null);
           }
         }}>
@@ -352,22 +361,45 @@ export function SessionList() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="pace-input">Pace (min:sec per km)</Label>
-                    <Input
-                      id="pace-input"
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      placeholder="5:10"
-                      value={runningPace}
-                      onChange={(e) => {
-                        setRunningPace(e.target.value);
-                        setCardioError(null);
-                      }}
-                      className="text-lg h-12"
-                      disabled={isSavingCardio}
-                    />
-                    <p className="text-xs text-muted-foreground">e.g. 5:10 for five minutes ten seconds per km</p>
+                    <Label>Pace (min/sec per km)</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="pace-minutes-input" className="text-xs text-muted-foreground">Minutes</Label>
+                        <Input
+                          id="pace-minutes-input"
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          placeholder="0"
+                          value={runningPaceMinutes}
+                          onChange={(e) => {
+                            setRunningPaceMinutes(e.target.value);
+                            setCardioError(null);
+                          }}
+                          className="h-10"
+                          disabled={isSavingCardio}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="pace-seconds-input" className="text-xs text-muted-foreground">Seconds</Label>
+                        <Input
+                          id="pace-seconds-input"
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          max="59"
+                          placeholder="0"
+                          value={runningPaceSeconds}
+                          onChange={(e) => {
+                            setRunningPaceSeconds(e.target.value);
+                            setCardioError(null);
+                          }}
+                          className="h-10"
+                          disabled={isSavingCardio}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Example: 5 min 10 sec per km</p>
                   </div>
                 </div>
               )}
