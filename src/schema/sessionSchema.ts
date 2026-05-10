@@ -79,7 +79,7 @@ const EffortSchema = z
 
 /** ---------- Exercise / Step ---------- */
 
-export const StepSchema = z.object({
+const StepSchema = z.object({
   id: IdSchema,
   name: z.string().min(1),
   sets: z.number().int().positive(),
@@ -93,7 +93,7 @@ export const StepSchema = z.object({
 
 /** ---------- Blocks (superset-only today, extensible tomorrow) ---------- */
 
-export const SupersetBlockSchema = z
+const SupersetBlockSchema = z
   .object({
     type: z.literal("superset"),
     id: IdSchema.optional(),
